@@ -1,0 +1,44 @@
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** Minimal SCORM 1.2 imsmanifest.xml (single SCO). */
+export function buildImsManifest(options: {
+  courseTitle: string;
+  manifestId: string;
+}): string {
+  const title = escapeXml(options.courseTitle);
+  const mid = escapeXml(options.manifestId.replace(/[^a-zA-Z0-9_-]/g, "-"));
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<manifest identifier="${mid}" version="1.0"
+  xmlns="http://www.imsproject.org/xsd/imscp_rootv1p1p2"
+  xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_rootv1p2"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsproject.org/xsd/imscp_rootv1p1p2 imscp_rootv1p1p2.xsd http://www.adlnet.org/xsd/adlcp_rootv1p2 adlcp_rootv1p2.xsd">
+  <metadata>
+    <schema>ADL SCORM</schema>
+    <schemaversion>1.2</schemaversion>
+  </metadata>
+  <organizations default="ORG1">
+    <organization identifier="ORG1">
+      <title>${title}</title>
+      <item identifier="ITEM1" identifierref="RES1" isvisible="true">
+        <title>${title}</title>
+      </item>
+    </organization>
+  </organizations>
+  <resources>
+    <resource identifier="RES1" type="webcontent" adlcp:scormtype="sco" href="index.html">
+      <file href="index.html"/>
+      <file href="scormdriver.js"/>
+    </resource>
+  </resources>
+</manifest>
+`;
+
+}
