@@ -77,6 +77,10 @@ export function parsePageContent(raw: Json | undefined): PageContentV1 {
         v: 1,
         template: "text_image",
         body: typeof o.body === "string" ? o.body : "",
+        imageAssetId:
+          typeof o.imageAssetId === "string" && o.imageAssetId.length > 0
+            ? o.imageAssetId
+            : null,
         imageUrl: typeof o.imageUrl === "string" ? o.imageUrl : "",
         imageAlt: typeof o.imageAlt === "string" ? o.imageAlt : "",
       };

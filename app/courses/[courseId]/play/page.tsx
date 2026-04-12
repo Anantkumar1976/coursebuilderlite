@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 
 import { CoursePlayer } from "@/components/course-player/course-player";
+import { collectImageAssetIdsFromPages } from "@/lib/assets/collect-image-asset-ids";
+import { getSignedUrlsForAssetIds } from "@/lib/assets/signed-urls";
 import { parsePageContent } from "@/lib/page-builder";
 import { createClient } from "@/lib/supabase/server";
 
@@ -33,11 +35,15 @@ export default async function CoursePlayPage({
     content: parsePageContent(p.content),
   }));
 
+  const assetIds = collectImageAssetIdsFromPages(pages ?? []);
+  const signedImageUrls = await getSignedUrlsForAssetIds(supabase, assetIds);
+
   return (
     <CoursePlayer
       courseId={course.id}
       courseTitle={course.title}
       pages={playerPages}
+      signedImageUrls={signedImageUrls}
     />
   );
 }

@@ -3,6 +3,21 @@ import { TEMPLATE_LABELS, type PageContentV1 } from "@/lib/page-builder";
 
 import { escapeAttr, escapeHtml } from "./html-escape";
 
+/** When exporting SCORM, map asset ids to paths inside the zip (e.g. media/uuid.png). */
+export type PageHtmlScormOptions = {
+  scormRelative?: Record<string, string>;
+};
+
+function textImageSrc(
+  content: Extract<PageContentV1, { template: "text_image" }>,
+  scorm?: Record<string, string>,
+): string {
+  if (content.imageAssetId && scorm?.[content.imageAssetId]) {
+    return scorm[content.imageAssetId];
+  }
+  return content.imageUrl.trim();
+}
+
 function bodyParagraphs(text: string): string {
   if (!text.trim()) {
     return '<p class="cb-muted">No content yet.</p>';
@@ -27,7 +42,10 @@ function videoHtml(url: string): string {
   return `<p><a href="${escapeAttr(u)}" target="_blank" rel="noopener noreferrer">Open video link</a></p>`;
 }
 
-export function pageContentToHtml(content: PageContentV1): string {
+export function pageContentToHtml(
+  content: PageContentV1,
+  scorm?: PageHtmlScormOptions,
+): string {
   const label = TEMPLATE_LABELS[content.template];
   const badge = `<p class="cb-template-label">${escapeHtml(label)}</p>`;
 
@@ -36,9 +54,10 @@ export function pageContentToHtml(content: PageContentV1): string {
       return `${badge}<div class="cb-block">${bodyParagraphs(content.body)}</div>`;
 
     case "text_image": {
-      const img = content.imageUrl
-        ? `<figure class="cb-figure"><img src="${escapeAttr(content.imageUrl)}" alt="${escapeAttr(content.imageAlt || "")}" loading="lazy"/>${content.imageAlt ? `<figcaption>${escapeHtml(content.imageAlt)}</figcaption>` : ""}</figure>`
-        : '<p class="cb-muted">No image URL set.</p>';
+      const src = textImageSrc(content, scorm?.scormRelative);
+      const img = src
+        ? `<figure class="cb-figure"><img src="${escapeAttr(src)}" alt="${escapeAttr(content.imageAlt || "")}" loading="lazy"/>${content.imageAlt ? `<figcaption>${escapeHtml(content.imageAlt)}</figcaption>` : ""}</figure>`
+        : '<p class="cb-muted">No image set.</p>';
       return `${badge}<div class="cb-block">${bodyParagraphs(content.body)}</div>${img}`;
     }
 

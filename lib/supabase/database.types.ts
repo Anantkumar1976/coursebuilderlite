@@ -52,6 +52,10 @@ export type Database = {
           title: string;
           description: string | null;
           status: "draft" | "published";
+          locale: string;
+          scorm_passing_score_percent: number;
+          manifest_description: string | null;
+          estimated_duration_minutes: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -61,6 +65,10 @@ export type Database = {
           title: string;
           description?: string | null;
           status?: "draft" | "published";
+          locale?: string;
+          scorm_passing_score_percent?: number;
+          manifest_description?: string | null;
+          estimated_duration_minutes?: number | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -70,6 +78,10 @@ export type Database = {
           title?: string;
           description?: string | null;
           status?: "draft" | "published";
+          locale?: string;
+          scorm_passing_score_percent?: number;
+          manifest_description?: string | null;
+          estimated_duration_minutes?: number | null;
           created_at?: string;
           updated_at?: string;
         };

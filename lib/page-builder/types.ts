@@ -25,6 +25,8 @@ export type PageContentV1 =
       v: 1;
       template: "text_image";
       body: string;
+      /** Supabase Storage asset row id when using an uploaded file. */
+      imageAssetId?: string | null;
       imageUrl: string;
       imageAlt: string;
     }

@@ -1,11 +1,12 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-
+import type { SupabaseClient } from "@supabase/supabase-js";
 import JSZip from "jszip";
 
+import { collectImageAssetIdsFromPages } from "@/lib/assets/collect-image-asset-ids";
+import { extensionFromFilename } from "@/lib/assets/storage-path";
 import { parsePageContent } from "@/lib/page-builder";
-import type { Json } from "@/lib/supabase/database.types";
+import type { Database, Json } from "@/lib/supabase/database.types";
 
+import { buildScormDriverWithPassingScore } from "./apply-course-settings";
 import { buildScormIndexHtml } from "./build-index-html";
 import { buildImsManifest } from "./build-manifest";
 import { pageContentToHtml } from "./page-to-html";
@@ -19,27 +20,82 @@ export async function buildScormZipBuffer(options: {
   courseTitle: string;
   courseId: string;
   pages: PageRow[];
+  supabase: SupabaseClient<Database>;
+  locale: string;
+  scormPassingScorePercent: number;
+  manifestDescription: string | null;
+  courseDescription: string | null;
+  estimatedDurationMinutes: number | null;
 }): Promise<Buffer> {
+  const assetIds = collectImageAssetIdsFromPages(options.pages);
+  const scormRelative: Record<string, string> = {};
+  const packageFiles: string[] = [];
+
+  let assetRows: {
+    id: string;
+    bucket: string;
+    storage_path: string;
+    filename: string;
+  }[] = [];
+  if (assetIds.length > 0) {
+    const { data } = await options.supabase
+      .from("assets")
+      .select("id, bucket, storage_path, filename")
+      .in("id", assetIds);
+    assetRows = data ?? [];
+  }
+
+  for (const row of assetRows) {
+    const ext = extensionFromFilename(row.filename);
+    const zipPath = `media/${row.id}${ext}`;
+    scormRelative[row.id] = zipPath;
+    packageFiles.push(zipPath);
+  }
+
   const parsed: { title: string; innerHtml: string }[] = options.pages.map(
     (p) => {
       const content = parsePageContent(p.content);
       return {
         title: p.title || "Untitled page",
-        innerHtml: pageContentToHtml(content),
+        innerHtml: pageContentToHtml(content, { scormRelative }),
       };
     },
   );
 
-  const indexHtml = buildScormIndexHtml(options.courseTitle, parsed);
+  const manifestSummary =
+    options.manifestDescription?.trim() ||
+    options.courseDescription?.trim() ||
+    null;
+
+  const indexHtml = buildScormIndexHtml(options.courseTitle, parsed, {
+    lang: options.locale,
+  });
   const manifest = buildImsManifest({
     courseTitle: options.courseTitle,
     manifestId: `cbl-${options.courseId}`,
+    packageFiles,
+    locale: options.locale,
+    manifestSummary,
+    estimatedDurationMinutes: options.estimatedDurationMinutes,
   });
 
-  const driverPath = join(process.cwd(), "lib/scorm/scormdriver.js");
-  const driverJs = readFileSync(driverPath, "utf8");
+  const driverJs = buildScormDriverWithPassingScore(
+    options.scormPassingScorePercent,
+  );
 
   const zip = new JSZip();
+
+  for (const row of assetRows) {
+    const zipPath = scormRelative[row.id];
+    if (!zipPath) continue;
+    const { data: blob, error } = await options.supabase.storage
+      .from(row.bucket)
+      .download(row.storage_path);
+    if (error || !blob) continue;
+    const buf = Buffer.from(await blob.arrayBuffer());
+    zip.file(zipPath, buf);
+  }
+
   zip.file("imsmanifest.xml", manifest);
   zip.file("index.html", indexHtml);
   zip.file("scormdriver.js", driverJs);

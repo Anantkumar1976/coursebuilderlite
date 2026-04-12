@@ -28,7 +28,13 @@ function BodyText({ text }: { text: string }) {
   );
 }
 
-export function TemplateRenderer({ content }: { content: PageContentV1 }) {
+export function TemplateRenderer({
+  content,
+  signedImageUrls,
+}: {
+  content: PageContentV1;
+  signedImageUrls?: Record<string, string>;
+}) {
   const label = TEMPLATE_LABELS[content.template];
 
   return (
@@ -42,24 +48,30 @@ export function TemplateRenderer({ content }: { content: PageContentV1 }) {
       {content.template === "text_image" ? (
         <div className="space-y-6">
           <BodyText text={content.body} />
-          {content.imageUrl ? (
-            <figure className="overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={content.imageUrl}
-                alt={content.imageAlt || ""}
-                className="mx-auto max-h-[min(70vh,560px)] w-full object-contain"
-                loading="lazy"
-              />
-              {content.imageAlt ? (
-                <figcaption className="px-3 py-2 text-center text-xs text-zinc-600 dark:text-zinc-400">
-                  {content.imageAlt}
-                </figcaption>
-              ) : null}
-            </figure>
-          ) : (
-            <p className="text-sm text-zinc-500">No image URL set.</p>
-          )}
+          {(() => {
+            const src =
+              content.imageAssetId && signedImageUrls?.[content.imageAssetId]
+                ? signedImageUrls[content.imageAssetId]
+                : content.imageUrl.trim() || null;
+            return src ? (
+              <figure className="overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={src}
+                  alt={content.imageAlt || ""}
+                  className="mx-auto max-h-[min(70vh,560px)] w-full object-contain"
+                  loading="lazy"
+                />
+                {content.imageAlt ? (
+                  <figcaption className="px-3 py-2 text-center text-xs text-zinc-600 dark:text-zinc-400">
+                    {content.imageAlt}
+                  </figcaption>
+                ) : null}
+              </figure>
+            ) : (
+              <p className="text-sm text-zinc-500">No image set.</p>
+            );
+          })()}
         </div>
       ) : null}
 

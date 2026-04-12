@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  TextImageMedia,
+  type CourseAssetLite,
+} from "@/components/media/text-image-media";
 import { TEMPLATE_LABELS, type PageContentV1 } from "@/lib/page-builder";
 
 function fieldClass() {
@@ -13,9 +17,18 @@ function labelClass() {
 type Props = {
   content: PageContentV1;
   onChange: (next: PageContentV1) => void;
+  courseId: string;
+  courseAssets: CourseAssetLite[];
+  onAssetsUpdated: () => void;
 };
 
-export function ContentEditor({ content, onChange }: Props) {
+export function ContentEditor({
+  content,
+  onChange,
+  courseId,
+  courseAssets,
+  onAssetsUpdated,
+}: Props) {
   const template = content.template;
   const badge = TEMPLATE_LABELS[template];
 
@@ -63,21 +76,13 @@ export function ContentEditor({ content, onChange }: Props) {
               }
             />
           </div>
-          <div>
-            <label className={labelClass()} htmlFor="ti-url">
-              Image URL
-            </label>
-            <input
-              id="ti-url"
-              type="url"
-              className={fieldClass()}
-              value={content.imageUrl}
-              onChange={(e) =>
-                onChange({ ...content, imageUrl: e.target.value })
-              }
-              placeholder="https://"
-            />
-          </div>
+          <TextImageMedia
+            courseId={courseId}
+            content={content}
+            onChange={onChange}
+            courseAssets={courseAssets}
+            onAssetsUpdated={onAssetsUpdated}
+          />
           <div>
             <label className={labelClass()} htmlFor="ti-alt">
               Alt text

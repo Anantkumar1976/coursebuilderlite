@@ -1,4 +1,4 @@
-import { escapeHtml } from "./html-escape";
+import { escapeAttr, escapeHtml } from "./html-escape";
 
 const SCORM_CSS = `
 :root { --bg:#f4f4f5; --card:#fff; --text:#18181b; --muted:#71717a; --border:#e4e4e7; --accent:#18181b; }
@@ -65,7 +65,9 @@ body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-s
 export function buildScormIndexHtml(
   courseTitle: string,
   pages: { title: string; innerHtml: string }[],
+  options?: { lang?: string },
 ): string {
+  const lang = (options?.lang ?? "en").trim() || "en";
   const sections = pages
     .map(
       (p, i) => `
@@ -79,7 +81,7 @@ export function buildScormIndexHtml(
   const total = pages.length;
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${escapeAttr(lang)}">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>

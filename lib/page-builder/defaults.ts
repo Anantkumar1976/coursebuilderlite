@@ -27,6 +27,7 @@ export function defaultPageContent(template: TemplateId): PageContentV1 {
         v: 1,
         template: "text_image",
         body: "",
+        imageAssetId: null,
         imageUrl: "",
         imageAlt: "",
       };

@@ -17,9 +17,16 @@ type Props = {
   courseId: string;
   courseTitle: string;
   pages: PlayerPage[];
+  /** Signed URLs for `text_image` blocks that reference `imageAssetId`. */
+  signedImageUrls?: Record<string, string>;
 };
 
-export function CoursePlayer({ courseId, courseTitle, pages }: Props) {
+export function CoursePlayer({
+  courseId,
+  courseTitle,
+  pages,
+  signedImageUrls,
+}: Props) {
   const [index, setIndex] = useState(0);
   const total = pages.length;
   const clampedIndex = total === 0 ? 0 : Math.min(index, total - 1);
@@ -116,7 +123,11 @@ export function CoursePlayer({ courseId, courseTitle, pages }: Props) {
             </h1>
           </header>
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 sm:p-8">
-            <TemplateRenderer key={current.id} content={current.content} />
+            <TemplateRenderer
+              key={current.id}
+              content={current.content}
+              signedImageUrls={signedImageUrls}
+            />
           </div>
         </div>
 

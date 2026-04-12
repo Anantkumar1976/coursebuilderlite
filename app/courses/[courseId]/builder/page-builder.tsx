@@ -9,6 +9,7 @@ import {
   reorderPages,
   savePage,
 } from "@/lib/actions/page";
+import type { CourseAssetLite } from "@/components/media/text-image-media";
 import {
   isTemplateId,
   TEMPLATE_IDS,
@@ -30,12 +31,14 @@ type Props = {
   courseId: string;
   courseTitle: string;
   initialPages: BuilderPageRow[];
+  initialAssets: CourseAssetLite[];
 };
 
 export function PageBuilder({
   courseId,
   courseTitle,
   initialPages,
+  initialAssets,
 }: Props) {
   const router = useRouter();
   const [pages, setPages] = useState(initialPages);
@@ -50,10 +53,15 @@ export function PageBuilder({
     TEMPLATE_IDS[0],
   );
   const [creating, setCreating] = useState(false);
+  const [assets, setAssets] = useState(initialAssets);
 
   useEffect(() => {
     setPages(initialPages);
   }, [initialPages]);
+
+  useEffect(() => {
+    setAssets(initialAssets);
+  }, [initialAssets]);
 
   useEffect(() => {
     if (
@@ -293,6 +301,9 @@ export function PageBuilder({
             <ContentEditor
               content={contentDraft}
               onChange={setContentDraft}
+              courseId={courseId}
+              courseAssets={assets}
+              onAssetsUpdated={refresh}
             />
           </div>
         ) : (
