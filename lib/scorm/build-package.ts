@@ -6,12 +6,13 @@ import { extensionFromFilename } from "@/lib/assets/storage-path";
 import { parsePageContent } from "@/lib/page-builder";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
-import { buildScormDriverWithPassingScore } from "./apply-course-settings";
+import { buildScormDriverWithCourseSettings } from "./apply-course-settings";
 import { buildScormIndexHtml } from "./build-index-html";
 import { buildImsManifest } from "./build-manifest";
 import { pageContentToHtml } from "./page-to-html";
 
 export type PageRow = {
+  id: string;
   title: string;
   content: Json;
 };
@@ -23,9 +24,12 @@ export async function buildScormZipBuffer(options: {
   supabase: SupabaseClient<Database>;
   locale: string;
   scormPassingScorePercent: number;
+  /** Max submitted assessment scores; null = unlimited (SCORM retake + exit flow). */
+  assessmentAttemptsLimit: number | null;
   manifestDescription: string | null;
   courseDescription: string | null;
   estimatedDurationMinutes: number | null;
+  customCss: string | null;
 }): Promise<Buffer> {
   const assetIds = collectImageAssetIdsFromPages(options.pages);
   const scormRelative: Record<string, string> = {};
@@ -52,12 +56,18 @@ export async function buildScormZipBuffer(options: {
     packageFiles.push(zipPath);
   }
 
+  const pageIndexById = Object.fromEntries(
+    options.pages.map((row, idx) => [row.id, idx]),
+  );
   const parsed: { title: string; innerHtml: string }[] = options.pages.map(
     (p) => {
       const content = parsePageContent(p.content);
       return {
         title: p.title || "Untitled page",
-        innerHtml: pageContentToHtml(content, { scormRelative }),
+        innerHtml: pageContentToHtml(content, {
+          scormRelative,
+          pageIndexById,
+        }),
       };
     },
   );
@@ -69,6 +79,7 @@ export async function buildScormZipBuffer(options: {
 
   const indexHtml = buildScormIndexHtml(options.courseTitle, parsed, {
     lang: options.locale,
+    customCss: options.customCss,
   });
   const manifest = buildImsManifest({
     courseTitle: options.courseTitle,
@@ -79,8 +90,9 @@ export async function buildScormZipBuffer(options: {
     estimatedDurationMinutes: options.estimatedDurationMinutes,
   });
 
-  const driverJs = buildScormDriverWithPassingScore(
+  const driverJs = buildScormDriverWithCourseSettings(
     options.scormPassingScorePercent,
+    options.assessmentAttemptsLimit,
   );
 
   const zip = new JSZip();

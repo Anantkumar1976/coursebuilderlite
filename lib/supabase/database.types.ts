@@ -45,6 +45,60 @@ export type Database = {
         };
         Relationships: [];
       };
+      course_reference_materials: {
+        Row: {
+          id: string;
+          course_id: string;
+          asset_id: string;
+          label: string;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          course_id: string;
+          asset_id: string;
+          label?: string;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          course_id?: string;
+          asset_id?: string;
+          label?: string;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      lessons: {
+        Row: {
+          id: string;
+          course_id: string;
+          title: string;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          course_id: string;
+          title?: string;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          course_id?: string;
+          title?: string;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       courses: {
         Row: {
           id: string;
@@ -56,6 +110,13 @@ export type Database = {
           scorm_passing_score_percent: number;
           manifest_description: string | null;
           estimated_duration_minutes: number | null;
+          navigation_flow: "linear" | "open" | "website";
+          attempts_limit: number | null;
+          assessment_attempts_limit: number | null;
+          custom_css: string | null;
+          banner_asset_id: string | null;
+          theme_fonts: Json;
+          theme_colors: Json;
           created_at: string;
           updated_at: string;
         };
@@ -69,6 +130,13 @@ export type Database = {
           scorm_passing_score_percent?: number;
           manifest_description?: string | null;
           estimated_duration_minutes?: number | null;
+          navigation_flow?: "linear" | "open" | "website";
+          attempts_limit?: number | null;
+          assessment_attempts_limit?: number | null;
+          custom_css?: string | null;
+          banner_asset_id?: string | null;
+          theme_fonts?: Json;
+          theme_colors?: Json;
           created_at?: string;
           updated_at?: string;
         };
@@ -82,6 +150,13 @@ export type Database = {
           scorm_passing_score_percent?: number;
           manifest_description?: string | null;
           estimated_duration_minutes?: number | null;
+          navigation_flow?: "linear" | "open" | "website";
+          attempts_limit?: number | null;
+          assessment_attempts_limit?: number | null;
+          custom_css?: string | null;
+          banner_asset_id?: string | null;
+          theme_fonts?: Json;
+          theme_colors?: Json;
           created_at?: string;
           updated_at?: string;
         };
@@ -91,6 +166,7 @@ export type Database = {
         Row: {
           id: string;
           course_id: string;
+          lesson_id: string;
           title: string;
           sort_order: number;
           content: Json;
@@ -100,6 +176,7 @@ export type Database = {
         Insert: {
           id?: string;
           course_id: string;
+          lesson_id: string;
           title?: string;
           sort_order?: number;
           content?: Json;
@@ -109,6 +186,7 @@ export type Database = {
         Update: {
           id?: string;
           course_id?: string;
+          lesson_id?: string;
           title?: string;
           sort_order?: number;
           content?: Json;

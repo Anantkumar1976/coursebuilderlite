@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { parseAttemptsLimit } from "@/lib/course-player/attempts";
+import { parseNavigationFlow } from "@/lib/course-player/navigation-flow";
 import { createClient } from "@/lib/supabase/server";
 
 export async function createCourse(formData: FormData) {
@@ -44,6 +46,7 @@ export async function updateCourseSettings(courseId: string, formData: FormData)
   const manifestDescription =
     (formData.get("manifest_description") as string)?.trim() || null;
   const locale = (formData.get("locale") as string)?.trim() || "en";
+  const customCss = (formData.get("custom_css") as string)?.trim() || null;
 
   const passingRaw = formData.get("scorm_passing_score_percent");
   let scormPassingScorePercent = 70;
@@ -63,6 +66,28 @@ export async function updateCourseSettings(courseId: string, formData: FormData)
     }
   }
 
+  const navigationFlow = parseNavigationFlow(
+    formData.get("navigation_flow"),
+  );
+
+  const attemptsMode =
+    typeof formData.get("attempts_mode") === "string"
+      ? (formData.get("attempts_mode") as string)
+      : "unlimited";
+  const attemptsLimit =
+    attemptsMode === "count"
+      ? parseAttemptsLimit(formData.get("attempts_limit"))
+      : null;
+
+  const assessmentAttemptsMode =
+    typeof formData.get("assessment_attempts_mode") === "string"
+      ? (formData.get("assessment_attempts_mode") as string)
+      : "unlimited";
+  const assessmentAttemptsLimit =
+    assessmentAttemptsMode === "count"
+      ? parseAttemptsLimit(formData.get("assessment_attempts_limit"))
+      : null;
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -80,6 +105,10 @@ export async function updateCourseSettings(courseId: string, formData: FormData)
       locale,
       scorm_passing_score_percent: scormPassingScorePercent,
       estimated_duration_minutes: estimatedDurationMinutes,
+      navigation_flow: navigationFlow,
+      attempts_limit: attemptsLimit,
+      assessment_attempts_limit: assessmentAttemptsLimit,
+      custom_css: customCss,
     })
     .eq("id", courseId)
     .eq("user_id", user.id);

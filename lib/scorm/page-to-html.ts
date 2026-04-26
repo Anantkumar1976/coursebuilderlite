@@ -1,11 +1,24 @@
 import { videoEmbedUrl } from "@/lib/course-player/embed-url";
-import { TEMPLATE_LABELS, type PageContentV1 } from "@/lib/page-builder";
+import {
+  TEMPLATE_LABELS,
+  normalizeImageCarouselItems,
+  normalizeImageGridItems,
+  type PageContentV1,
+} from "@/lib/page-builder";
+import {
+  blockCountForLayout,
+  isColumnsLayout,
+  normalizeTextImageContent,
+} from "@/lib/page-builder/text-image";
+import { isLikelyRichHtml } from "@/lib/rich-text/is-likely-html";
+import { sanitizeBodyHtml } from "@/lib/rich-text/sanitize";
 
 import { escapeAttr, escapeHtml } from "./html-escape";
 
 /** When exporting SCORM, map asset ids to paths inside the zip (e.g. media/uuid.png). */
 export type PageHtmlScormOptions = {
   scormRelative?: Record<string, string>;
+  pageIndexById?: Record<string, number>;
 };
 
 function textImageSrc(
@@ -16,6 +29,110 @@ function textImageSrc(
     return scorm[content.imageAssetId];
   }
   return content.imageUrl.trim();
+}
+
+function textImageBlockSrc(
+  block: {
+    imageAssetId?: string | null;
+    imageUrl: string;
+  },
+  scorm?: Record<string, string>,
+): string {
+  if (block.imageAssetId && scorm?.[block.imageAssetId]) {
+    return scorm[block.imageAssetId];
+  }
+  return block.imageUrl.trim();
+}
+
+function tabImageSrc(
+  tab: {
+    imageAssetId?: string | null;
+    imageUrl: string;
+  },
+  scorm?: Record<string, string>,
+): string {
+  if (tab.imageAssetId && scorm?.[tab.imageAssetId]) {
+    return scorm[tab.imageAssetId];
+  }
+  return tab.imageUrl.trim();
+}
+
+function imageGridCardHtml(
+  item: {
+    id: string;
+    title: string;
+    caption: string;
+    imageAssetId?: string | null;
+    imageUrl: string;
+    imageAlt: string;
+    linkKind: "none" | "page" | "external";
+    targetPageId: string | null;
+    externalUrl: string;
+  },
+  scorm?: Record<string, string>,
+  pageIndexById?: Record<string, number>,
+  captionMode: "hover" | "below" = "hover",
+): string {
+  const src = tabImageSrc(item, scorm);
+  const img = src
+    ? `<img src="${escapeAttr(src)}" alt="${escapeAttr(item.imageAlt || item.title || "Image")}" loading="lazy"/>`
+    : `<div class="cb-grid-no-image">No image</div>`;
+
+  let attrs = "";
+  if (item.linkKind === "external" && item.externalUrl.trim()) {
+    attrs = ` data-link-kind="external" data-link-url="${escapeAttr(item.externalUrl.trim())}"`;
+  } else if (
+    item.linkKind === "page" &&
+    item.targetPageId &&
+    pageIndexById &&
+    typeof pageIndexById[item.targetPageId] === "number"
+  ) {
+    attrs = ` data-link-kind="page" data-jump-index="${pageIndexById[item.targetPageId]}"`;
+  }
+
+  const hoverCaption =
+    captionMode === "hover"
+      ? `<div class="cb-grid-hover"><p class="cb-grid-title">${escapeHtml(item.title || "Tile")}</p>${item.caption ? `<p>${escapeHtml(item.caption)}</p>` : ""}</div>`
+      : "";
+  const belowCaption =
+    captionMode === "below"
+      ? `<div class="cb-grid-below"><p class="cb-grid-title">${escapeHtml(item.title || "Tile")}</p>${item.caption ? `<p>${escapeHtml(item.caption)}</p>` : ""}</div>`
+      : "";
+
+  return `<button type="button" class="cb-grid-card"${attrs}><div class="cb-grid-media">${img}${hoverCaption}</div>${belowCaption}</button>`;
+}
+
+function imageCarouselSlideHtml(
+  item: {
+    id: string;
+    title: string;
+    caption: string;
+    imageAssetId?: string | null;
+    imageUrl: string;
+    imageAlt: string;
+  },
+  scorm?: Record<string, string>,
+  captionMode: "overlay" | "below" = "overlay",
+): string {
+  const src = tabImageSrc(item, scorm);
+  const image = src
+    ? `<img src="${escapeAttr(src)}" alt="${escapeAttr(item.imageAlt || item.title || "Slide image")}" loading="lazy"/>`
+    : `<div class="cb-carousel-no-image">No image</div>`;
+  const overlay =
+    captionMode === "overlay"
+      ? `<div class="cb-carousel-overlay"><p class="cb-grid-title">${escapeHtml(item.title || "Slide")}</p>${item.caption ? `<p>${escapeHtml(item.caption)}</p>` : ""}</div>`
+      : "";
+  const below =
+    captionMode === "below"
+      ? `<div class="cb-carousel-below"><p class="cb-grid-title">${escapeHtml(item.title || "Slide")}</p>${item.caption ? `<p>${escapeHtml(item.caption)}</p>` : ""}</div>`
+      : "";
+  return `<div class="cb-carousel-slide"><div class="cb-carousel-media">${image}${overlay}</div>${below}</div>`;
+}
+
+function textImageFigureHtml(src: string, alt: string): string {
+  return src
+    ? `<figure class="cb-figure"><img src="${escapeAttr(src)}" alt="${escapeAttr(alt)}" loading="lazy"/>${alt ? `<figcaption>${escapeHtml(alt)}</figcaption>` : ""}</figure>`
+    : '<p class="cb-muted">No image set.</p>';
 }
 
 function bodyParagraphs(text: string): string {
@@ -30,6 +147,17 @@ function bodyParagraphs(text: string): string {
         `<p class="cb-body">${escapeHtml(para).replace(/\n/g, "<br/>")}</p>`,
     )
     .join("\n");
+}
+
+/** Rich HTML from the builder, or legacy plain text → escaped paragraphs. */
+function bodyContentForExport(text: string): string {
+  if (!text.trim()) {
+    return '<p class="cb-muted">No content yet.</p>';
+  }
+  if (isLikelyRichHtml(text)) {
+    return `<div class="cb-rich">${sanitizeBodyHtml(text)}</div>`;
+  }
+  return bodyParagraphs(text);
 }
 
 function videoHtml(url: string): string {
@@ -51,26 +179,146 @@ export function pageContentToHtml(
 
   switch (content.template) {
     case "text":
-      return `${badge}<div class="cb-block">${bodyParagraphs(content.body)}</div>`;
+      return `${badge}<div class="cb-block">${bodyContentForExport(content.body)}</div>`;
 
     case "text_image": {
-      const src = textImageSrc(content, scorm?.scormRelative);
-      const img = src
-        ? `<figure class="cb-figure"><img src="${escapeAttr(src)}" alt="${escapeAttr(content.imageAlt || "")}" loading="lazy"/>${content.imageAlt ? `<figcaption>${escapeHtml(content.imageAlt)}</figcaption>` : ""}</figure>`
-        : '<p class="cb-muted">No image set.</p>';
-      return `${badge}<div class="cb-block">${bodyParagraphs(content.body)}</div>${img}`;
+      const c = normalizeTextImageContent(content);
+      if (isColumnsLayout(c.layout)) {
+        const n = blockCountForLayout(c.layout);
+        const blocks = c.blocks ?? [];
+        const colsClass =
+          c.layout === "columns_2"
+            ? "cb-ti-cols-2"
+            : c.layout === "columns_3"
+              ? "cb-ti-cols-3"
+              : "cb-ti-cols-4";
+        const parts: string[] = [];
+        for (let i = 0; i < n; i++) {
+          const b = blocks[i];
+          if (!b) continue;
+          const src = textImageBlockSrc(b, scorm?.scormRelative);
+          parts.push(
+            `<div class="cb-ti-block">${textImageFigureHtml(src, b.imageAlt)}<div class="cb-block">${bodyContentForExport(b.body)}</div></div>`,
+          );
+        }
+        return `${badge}<div class="cb-ti-columns ${colsClass}">${parts.join("")}</div>`;
+      }
+      const src = textImageSrc(c, scorm?.scormRelative);
+      const img = textImageFigureHtml(src, c.imageAlt);
+      const bodyHtml = `<div class="cb-block">${bodyContentForExport(c.body)}</div>`;
+      switch (c.layout) {
+        case "image_left":
+          return `${badge}<div class="cb-ti-row cb-ti-image-left">${img}${bodyHtml}</div>`;
+        case "image_right":
+          return `${badge}<div class="cb-ti-row cb-ti-image-right">${bodyHtml}${img}</div>`;
+        case "image_top_full":
+          return `${badge}<div class="cb-ti-stack">${img}${bodyHtml}</div>`;
+        case "text_top_image_bottom_full":
+        default:
+          return `${badge}<div class="cb-ti-stack">${bodyHtml}${img}</div>`;
+      }
     }
 
-    case "text_video":
-      return `${badge}<div class="cb-block">${bodyParagraphs(content.body)}</div>${videoHtml(content.videoUrl)}`;
+    case "text_video": {
+      const vid = videoHtml(content.videoUrl);
+      const bodyHtml = `<div class="cb-block">${bodyContentForExport(content.body)}</div>`;
+      switch (content.layout) {
+        case "video_only":
+          return `${badge}${vid}`;
+        case "video_top":
+          return `${badge}<div class="cb-tv-stack">${vid}${bodyHtml}</div>`;
+        case "video_left":
+          return `${badge}<div class="cb-tv-row cb-tv-video-left">${vid}${bodyHtml}</div>`;
+        case "video_right":
+          return `${badge}<div class="cb-tv-row cb-tv-video-right">${bodyHtml}${vid}</div>`;
+        case "text_top":
+        default:
+          return `${badge}<div class="cb-tv-stack">${bodyHtml}${vid}</div>`;
+      }
+    }
 
     case "two_column":
-      return `${badge}<div class="cb-two-col"><section><h3 class="cb-h3">Column A</h3>${bodyParagraphs(content.left)}</section><section><h3 class="cb-h3">Column B</h3>${bodyParagraphs(content.right)}</section></div>`;
+      return `${badge}<div class="cb-two-col"><section>${bodyContentForExport(content.left)}</section><section>${bodyContentForExport(content.right)}</section></div>`;
+
+    case "embed_pdf": {
+      const src = tabImageSrc(
+        { imageAssetId: content.pdfAssetId, imageUrl: content.pdfUrl },
+        scorm?.scormRelative,
+      );
+      const intro = content.intro.trim()
+        ? `<div class="cb-block">${bodyContentForExport(content.intro)}</div>`
+        : "";
+      const note =
+        '<p class="cb-note">Author note: PDF must be publicly available or accessible within your corporate network for learners to open it.</p>';
+      if (!src) return `${badge}${intro}${note}<p class="cb-muted">No PDF selected yet.</p>`;
+      return `${badge}${intro}${note}<div class="cb-pdf-wrap"><iframe src="${escapeAttr(src)}" title="Embedded PDF"></iframe></div><p class="cb-note"><a href="${escapeAttr(src)}" target="_blank" rel="noopener noreferrer">Open PDF in new tab</a></p>`;
+    }
+
+    case "image_carousel": {
+      const items = normalizeImageCarouselItems(content.items).filter((it) =>
+        !!tabImageSrc(it, scorm?.scormRelative),
+      );
+      if (!items.length) {
+        const intro = content.intro.trim()
+          ? `<div class="cb-block">${bodyContentForExport(content.intro)}</div>`
+          : "";
+        return `${badge}${intro}<p class="cb-muted">No carousel images set.</p>`;
+      }
+      const intro = content.intro.trim()
+        ? `<div class="cb-block">${bodyContentForExport(content.intro)}</div>`
+        : "";
+      const slides = items
+        .map((it) =>
+          imageCarouselSlideHtml(it, scorm?.scormRelative, content.captionMode),
+        )
+        .join("");
+      return `${badge}${intro}<div class="cb-carousel" data-interactive="carousel"><button type="button" class="cb-carousel-nav cb-carousel-prev" aria-label="Previous slide">&#8592;</button><div class="cb-carousel-track">${slides}</div><button type="button" class="cb-carousel-nav cb-carousel-next" aria-label="Next slide">&#8594;</button></div>`;
+    }
+
+    case "image_grid": {
+      const items = normalizeImageGridItems(
+        content.layout,
+        content.rowMode,
+        content.items,
+      );
+      const visibleItems = items.filter((it) =>
+        !!tabImageSrc(it, scorm?.scormRelative),
+      );
+      const colCount =
+        content.rowMode === "single_row"
+          ? Math.max(1, visibleItems.length)
+          : Math.max(1, Math.ceil(visibleItems.length / 2));
+      const cols = `cb-grid-cols-${Math.min(8, colCount)}`;
+      const cards = visibleItems
+        .map((it) =>
+          imageGridCardHtml(
+            it,
+            scorm?.scormRelative,
+            scorm?.pageIndexById,
+            content.captionMode,
+          ),
+        )
+        .join("");
+      const intro = content.intro.trim()
+        ? `<div class="cb-block">${bodyContentForExport(content.intro)}</div>`
+        : "";
+      return `${badge}${intro}<div class="cb-grid ${cols}" data-row-mode="${content.rowMode}" data-interactive="image-grid">${cards}</div>`;
+    }
 
     case "tabs": {
       const tabs = content.tabs.length
         ? content.tabs
-        : [{ id: "t", label: "Tab", body: "" }];
+        : [
+            {
+              id: "t",
+              label: "Tab",
+              body: "",
+              imageAssetId: null,
+              imageUrl: "",
+              imageAlt: "",
+            },
+          ];
+      const isVertical = content.layout === "vertical_left";
       const labels = tabs
         .map(
           (t, i) =>
@@ -79,11 +327,22 @@ export function pageContentToHtml(
         .join("");
       const panels = tabs
         .map(
-          (t, i) =>
-            `<div class="cb-tab-panel" role="tabpanel" data-panel="${i}"${i === 0 ? "" : ' hidden'}><div class="cb-block">${bodyParagraphs(t.body)}</div></div>`,
+          (t, i) => {
+            const src = tabImageSrc(t, scorm?.scormRelative);
+            const img = src
+              ? `<div class="cb-tab-image-wrap">${textImageFigureHtml(src, t.imageAlt || "")}</div>`
+              : "";
+            const body = `<div class="cb-block">${bodyContentForExport(t.body)}</div>`;
+            const panelInner = isVertical
+              ? `${img}${body}`
+              : src
+                ? `<div class="cb-tab-media-row">${img}${body}</div>`
+                : body;
+            return `<div class="cb-tab-panel" role="tabpanel" data-panel="${i}"${i === 0 ? "" : ' hidden'}>${panelInner}</div>`;
+          },
         )
         .join("");
-      return `${badge}<div class="cb-tabs" data-interactive="tabs"><div class="cb-tab-labels" role="tablist">${labels}</div><div class="cb-tab-panels">${panels}</div></div>`;
+      return `${badge}<div class="cb-tabs ${isVertical ? "cb-tabs-vertical" : "cb-tabs-horizontal"}" data-interactive="tabs"><div class="cb-tab-labels" role="tablist"${isVertical ? ' aria-orientation="vertical"' : ""}>${labels}</div><div class="cb-tab-panels">${panels}</div></div>`;
     }
 
     case "accordion": {
@@ -93,10 +352,13 @@ export function pageContentToHtml(
       return `${badge}${items
         .map(
           (it) =>
-            `<details class="cb-details"><summary class="cb-summary">${escapeHtml(it.title || "Section")}</summary><div class="cb-details-body">${bodyParagraphs(it.body)}</div></details>`,
+            `<details class="cb-details"><summary class="cb-summary">${escapeHtml(it.title || "Section")}</summary><div class="cb-details-body">${bodyContentForExport(it.body)}</div></details>`,
         )
         .join("")}`;
     }
+
+    case "course_completion":
+      return `${badge}<div class="cb-final"><p class="cb-final-h">Course completion</p><div class="cb-block">${bodyContentForExport(content.summary)}</div><p class="cb-note">Certificate printing is available in the web player.</p></div>`;
 
     case "mcq": {
       const opts = content.options
@@ -123,6 +385,9 @@ export function pageContentToHtml(
       return `${badge}<div class="cb-assess cb-tf" data-correct="${content.correct ? "true" : "false"}"><p class="cb-q">${escapeHtml(content.question || "Statement")}</p><div class="cb-tf-btns"><button type="button" class="cb-tf-btn" data-val="true">True</button><button type="button" class="cb-tf-btn" data-val="false">False</button></div><p class="cb-feedback" hidden></p></div>`;
 
     case "final_quiz":
-      return `${badge}<div class="cb-final"><div class="cb-block">${bodyParagraphs(content.intro)}</div><div class="cb-final-grid"><div class="cb-final-card cb-pass"><p class="cb-final-h">Pass</p><p>${escapeHtml(content.passMessage || "—")}</p></div><div class="cb-final-card cb-fail"><p class="cb-final-h">Fail</p><p>${escapeHtml(content.failMessage || "—")}</p></div></div><p class="cb-note">Completion is recorded when you finish this course in the LMS.</p></div>`;
+      return `${badge}<div class="cb-final"><div class="cb-block">${bodyContentForExport(content.intro)}</div><p class="cb-note">Add separate question pages in the lesson; the LMS can aggregate scores from those pages.</p></div>`;
+
+    case "quiz_results":
+      return `${badge}<div class="cb-quiz-results"><div class="cb-block">${bodyContentForExport(content.intro)}</div><div class="cb-quiz-pass" hidden><p class="cb-final-h">Pass</p>${bodyContentForExport(content.passMessage)}</div><div class="cb-quiz-fail" hidden><p class="cb-final-h">Fail</p>${bodyContentForExport(content.failMessage)}</div><p class="cb-note">The LMS shows pass or fail here after the quiz is scored.</p></div>`;
   }
 }

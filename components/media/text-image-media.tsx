@@ -13,6 +13,12 @@ export type CourseAssetLite = {
   bytes: number | null;
 };
 
+export type TextImageImageValue = {
+  imageAssetId?: string | null;
+  imageUrl: string;
+  imageAlt: string;
+};
+
 type TextImage = Extract<PageContentV1, { template: "text_image" }>;
 
 type Props = {
@@ -23,19 +29,29 @@ type Props = {
   onAssetsUpdated: () => void;
 };
 
-export function TextImageMedia({
+/** Image upload / URL / alt — used for Text + Image template and per block in multi-block layouts. */
+export function TextImageImagePanel({
   courseId,
-  content,
+  value,
   onChange,
   courseAssets,
   onAssetsUpdated,
-}: Props) {
+  idPrefix = "ti",
+}: {
+  courseId: string;
+  value: TextImageImageValue;
+  onChange: (next: TextImageImageValue) => void;
+  courseAssets: CourseAssetLite[];
+  onAssetsUpdated: () => void;
+  /** Unique prefix for form ids when multiple panels on the page. */
+  idPrefix?: string;
+}) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   useEffect(() => {
-    const assetId = content.imageAssetId;
+    const assetId = value.imageAssetId;
     if (!assetId) {
       setPreviewUrl(null);
       return;
@@ -57,12 +73,12 @@ export function TextImageMedia({
     return () => {
       cancelled = true;
     };
-  }, [content.imageAssetId]);
+  }, [value.imageAssetId]);
 
   const displaySrc =
-    content.imageAssetId && previewUrl
+    value.imageAssetId && previewUrl
       ? previewUrl
-      : content.imageUrl.trim() || null;
+      : value.imageUrl.trim() || null;
 
   const handleFile = useCallback(
     async (file: File | null) => {
@@ -87,6 +103,7 @@ export function TextImageMedia({
           typeof crypto !== "undefined" && crypto.randomUUID
             ? crypto.randomUUID()
             : `a-${Date.now()}`;
+
         const storagePath = buildAssetStoragePath(
           user.id,
           courseId,
@@ -124,7 +141,7 @@ export function TextImageMedia({
         }
 
         onChange({
-          ...content,
+          ...value,
           imageAssetId: assetId,
           imageUrl: "",
         });
@@ -133,7 +150,7 @@ export function TextImageMedia({
         setUploading(false);
       }
     },
-    [content, courseId, onChange, onAssetsUpdated],
+    [courseId, onChange, onAssetsUpdated, value],
   );
 
   return (
@@ -161,13 +178,13 @@ export function TextImageMedia({
             }}
           />
         </label>
-        {content.imageAssetId ? (
+        {value.imageAssetId ? (
           <button
             type="button"
             className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
             onClick={() =>
               onChange({
-                ...content,
+                ...value,
                 imageAssetId: null,
               })
             }
@@ -192,13 +209,13 @@ export function TextImageMedia({
                 key={a.id}
                 type="button"
                 className={`rounded-md px-2 py-1.5 text-left text-sm ${
-                  content.imageAssetId === a.id
+                  value.imageAssetId === a.id
                     ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
                     : "text-zinc-800 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
                 }`}
                 onClick={() =>
                   onChange({
-                    ...content,
+                    ...value,
                     imageAssetId: a.id,
                     imageUrl: "",
                   })
@@ -217,24 +234,40 @@ export function TextImageMedia({
       ) : null}
 
       <div>
-        <label className={labelClass()} htmlFor="ti-url">
+        <label className={labelClass()} htmlFor={`${idPrefix}-url`}>
           External image URL (optional)
         </label>
         <input
-          id="ti-url"
+          id={`${idPrefix}-url`}
           type="url"
           className={fieldClass()}
-          value={content.imageUrl}
+          value={value.imageUrl}
           onChange={(e) =>
             onChange({
-              ...content,
+              ...value,
               imageUrl: e.target.value,
               imageAssetId: e.target.value.trim()
                 ? null
-                : content.imageAssetId,
+                : value.imageAssetId,
             })
           }
           placeholder="https://"
+        />
+      </div>
+
+      <div>
+        <label className={labelClass()} htmlFor={`${idPrefix}-alt`}>
+          Alt text
+        </label>
+        <input
+          id={`${idPrefix}-alt`}
+          type="text"
+          className={fieldClass()}
+          value={value.imageAlt}
+          onChange={(e) =>
+            onChange({ ...value, imageAlt: e.target.value })
+          }
+          placeholder="Describe the image for accessibility"
         />
       </div>
 
@@ -244,7 +277,7 @@ export function TextImageMedia({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={displaySrc}
-            alt={content.imageAlt || ""}
+            alt={value.imageAlt || ""}
             className="mt-2 max-h-64 w-full object-contain"
           />
         </div>
@@ -252,6 +285,28 @@ export function TextImageMedia({
         <p className="text-sm text-zinc-500">No image selected yet.</p>
       )}
     </div>
+  );
+}
+
+export function TextImageMedia({
+  courseId,
+  content,
+  onChange,
+  courseAssets,
+  onAssetsUpdated,
+}: Props) {
+  return (
+    <TextImageImagePanel
+      courseId={courseId}
+      value={{
+        imageAssetId: content.imageAssetId,
+        imageUrl: content.imageUrl,
+        imageAlt: content.imageAlt,
+      }}
+      onChange={(v) => onChange({ ...content, ...v })}
+      courseAssets={courseAssets}
+      onAssetsUpdated={onAssetsUpdated}
+    />
   );
 }
 

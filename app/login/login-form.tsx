@@ -26,17 +26,28 @@ export function LoginForm() {
     }
 
     const supabase = createClient();
-    const { error: signError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    setPending(false);
-    if (signError) {
-      setError(signError.message);
-      return;
+    try {
+      const { error: signError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (signError) {
+        setError(signError.message);
+        return;
+      }
+      router.push("/courses");
+      router.refresh();
+    } catch (err) {
+      const msg =
+        err instanceof Error && err.message === "Failed to fetch"
+          ? "Could not reach the sign-in server. Check your internet connection, VPN, and that Supabase is reachable (see .env.local)."
+          : err instanceof Error
+            ? err.message
+            : "Something went wrong. Try again.";
+      setError(msg);
+    } finally {
+      setPending(false);
     }
-    router.push("/courses");
-    router.refresh();
   }
 
   return (
