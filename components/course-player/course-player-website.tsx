@@ -124,12 +124,11 @@ export function CoursePlayerWebsite({
     pageIndex: 0,
     visitedIds: [] as string[],
   });
+  const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const [finalQuizSnapshot, setFinalQuizSnapshot] = useState<
     ReturnType<typeof readFinalQuizResult>
   >(null);
   const [attempts, setAttempts] = useState<AttemptsState | null>(null);
-
-  const totalLessons = lessons.length;
 
   const hasFinalAssessment = useMemo(
     () => courseHasQuizResultsPage(lessons),
@@ -168,6 +167,38 @@ export function CoursePlayerWebsite({
     setAttempts(next);
   }, [courseComplete, courseId, attempts?.active]);
 
+  const runScrollSync = useCallback(() => {
+    const root = scrollRootRef.current;
+    if (!root || total === 0) return;
+    if (root.clientHeight < 4) return;
+
+    const rootRect = root.getBoundingClientRect();
+    const visibleIds: string[] = [];
+
+    for (let i = 0; i < flat.length; i += 1) {
+      const item = flat[i];
+      if (isCourseCompletionTemplate(item.page) && !courseComplete) {
+        continue;
+      }
+      const el = document.getElementById(`cbl-section-${i}`);
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      if (r.bottom > rootRect.top + 2 && r.top < rootRect.bottom - 2) {
+        visibleIds.push(item.page.id);
+      }
+    }
+    if (visibleIds.length > 0) {
+      setVisited((prev) => {
+        const next = new Set(prev);
+        for (const id of visibleIds) next.add(id);
+        return next;
+      });
+    }
+  }, [flat, total, courseComplete]);
+
+  const runScrollSyncRef = useRef(runScrollSync);
+  runScrollSyncRef.current = runScrollSync;
+
   useLayoutEffect(() => {
     if (!flatIdsKey) return;
     const ids = flatIdsKey.split("|").filter(Boolean);
@@ -183,42 +214,45 @@ export function CoursePlayerWebsite({
       document
         .getElementById(`cbl-section-${idx}`)
         ?.scrollIntoView({ behavior: "auto" });
+      requestAnimationFrame(() => {
+        runScrollSyncRef.current();
+      });
     });
   }, [courseId, flatIdsKey, resumeFromUrl]);
 
   useEffect(() => {
-    const root = document.querySelector(
-      "[data-cbl-website-scroll-root]",
-    ) as HTMLElement | null;
+    const root = scrollRootRef.current;
     if (!root || total === 0) return;
 
-    const sections = flatIds.map(
-      (_, i) => document.getElementById(`cbl-section-${i}`) as HTMLElement | null,
-    );
+    let rafId = 0;
 
-    const obs = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting) return;
-          const sid = entry.target.getAttribute("data-page-id");
-          if (sid) {
-            setVisited((prev) => new Set([...prev, sid]));
-          }
-          const idxAttr = entry.target.getAttribute("data-flat-index");
-          if (idxAttr !== null) {
-            const n = parseInt(idxAttr, 10);
-            if (!Number.isNaN(n)) setActiveFlatIndex(n);
-          }
-        });
-      },
-      { root, rootMargin: "-40% 0px -45% 0px", threshold: 0 },
-    );
+    const schedule = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        runScrollSyncRef.current();
+      });
+    };
 
-    sections.forEach((el) => {
-      if (el) obs.observe(el);
-    });
-    return () => obs.disconnect();
-  }, [flatIds, flatIdsKey, total]);
+    root.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    const vv = window.visualViewport;
+    vv?.addEventListener("scroll", schedule);
+    vv?.addEventListener("resize", schedule);
+    const ro = new ResizeObserver(() => schedule());
+    ro.observe(root);
+    schedule();
+    return () => {
+      root.removeEventListener("scroll", schedule);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      vv?.removeEventListener("scroll", schedule);
+      vv?.removeEventListener("resize", schedule);
+      ro.disconnect();
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, [flatIdsKey, total, courseComplete]);
 
   useLayoutEffect(() => {
     progressFlushRef.current = {
@@ -270,7 +304,10 @@ export function CoursePlayerWebsite({
       return;
     }
     const el = document.getElementById(`cbl-section-${flatIdx}`);
-    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (!el) return;
+
+    setActiveFlatIndex(flatIdx);
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [flat, courseComplete]);
 
   const navigateToPageId = useCallback(
@@ -286,8 +323,8 @@ export function CoursePlayerWebsite({
     return (
       <div className="mx-auto max-w-2xl bg-white px-4 py-16 text-center">
         <p className="text-zinc-600">
-          This course has no pages yet. Add lessons and pages in the builder to
-          preview them here.
+          This manual has no topics yet. Add sections and topics in the builder
+          to preview them here.
         </p>
         <Link
           href={`/courses/${courseId}/builder`}
@@ -311,15 +348,9 @@ export function CoursePlayerWebsite({
     );
   }
 
-  const current = flat[activeFlatIndex];
-  const lessonOrdinal = (current?.lessonIndex ?? 0) + 1;
-  const pagesInLesson =
-    lessons[current?.lessonIndex ?? 0]?.pages.length ?? 0;
-  const pageOrdinalInLesson = (current?.pageIndexInLesson ?? 0) + 1;
-
   return (
     <div
-      className="flex min-h-[calc(100vh-3.5rem)] bg-zinc-100 dark:bg-zinc-900/80"
+      className="flex h-[calc(100vh-3.5rem)] min-h-0 max-h-[calc(100vh-3.5rem)] bg-zinc-100 dark:bg-zinc-900/80"
       style={{
         fontFamily: themeFonts.pageContent,
         fontSize: themeFonts.pageContentSize,
@@ -338,7 +369,7 @@ export function CoursePlayerWebsite({
       ) : null}
 
       <aside
-        className={`fixed left-0 top-0 z-50 flex h-full w-72 flex-col border-r border-zinc-200 bg-zinc-50 transition-transform duration-200 dark:border-zinc-800 dark:bg-zinc-950 lg:static lg:z-0 ${
+        className={`fixed left-0 top-0 z-50 flex h-full w-72 flex-col border-r border-zinc-200 bg-zinc-50 transition-transform duration-200 dark:border-zinc-800 dark:bg-zinc-950 lg:sticky lg:top-0 lg:z-20 lg:h-[calc(100vh-3.5rem)] ${
           sidebarOpen
             ? "translate-x-0"
             : "-translate-x-full lg:translate-x-0 lg:w-0 lg:overflow-hidden lg:border-0"
@@ -362,7 +393,7 @@ export function CoursePlayerWebsite({
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col bg-white">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
         <header className="sticky top-0 z-30 border-b border-zinc-200 bg-white px-3 py-3 sm:px-4">
           <div className="flex items-center gap-3">
             <button
@@ -370,7 +401,7 @@ export function CoursePlayerWebsite({
               onClick={() => setSidebarOpen((o) => !o)}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
               aria-expanded={sidebarOpen}
-              aria-label={sidebarOpen ? "Hide course menu" : "Show course menu"}
+              aria-label={sidebarOpen ? "Hide contents" : "Show contents"}
             >
               <span className="flex flex-col gap-1" aria-hidden>
                 <span className="block h-0.5 w-5 rounded bg-current" />
@@ -379,14 +410,7 @@ export function CoursePlayerWebsite({
               </span>
             </button>
 
-            <div className="min-w-0 flex-1 text-center">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                Lesson {lessonOrdinal} of {totalLessons}
-              </p>
-              <p className="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">
-                Section {pageOrdinalInLesson} of {pagesInLesson} (scroll to read)
-              </p>
-            </div>
+            <div className="min-w-0 flex-1" />
 
             <div className="flex shrink-0 items-center gap-2">
               {referenceMaterials.length > 0 ? (
@@ -404,8 +428,9 @@ export function CoursePlayerWebsite({
         </header>
 
         <div
+          ref={scrollRootRef}
           data-cbl-website-scroll-root
-          className="flex flex-1 flex-col overflow-y-auto bg-white px-5 py-6 sm:px-8 md:px-10 lg:px-14 xl:px-20"
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-white px-5 py-6 sm:px-8 md:px-10 lg:px-14 xl:px-20"
         >
           <div className="w-full min-w-0 flex-1 space-y-16 pb-24">
             {flat.map((item, i) => {
@@ -479,7 +504,7 @@ export function CoursePlayerWebsite({
                   href={`/courses/${courseId}/play`}
                   className="hover:text-zinc-900"
                 >
-                  Course home
+                  Manual home
                 </Link>
               ) : null}
               <Link

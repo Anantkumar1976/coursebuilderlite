@@ -54,7 +54,7 @@ export default async function CourseBuilderPage({
 
   const { data: assetRows } = await supabase
     .from("assets")
-    .select("id, filename, mime_type, bytes, created_at")
+    .select("id, filename, mime_type, bytes, created_at, bucket, storage_path")
     .eq("course_id", courseId)
     .order("created_at", { ascending: false });
 
@@ -63,6 +63,8 @@ export default async function CourseBuilderPage({
     filename: a.filename,
     mime_type: a.mime_type,
     bytes: a.bytes,
+    bucket: a.bucket,
+    storage_path: a.storage_path,
   }));
 
   return (

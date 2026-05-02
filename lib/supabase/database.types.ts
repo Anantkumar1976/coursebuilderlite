@@ -12,7 +12,7 @@ export type Database = {
       assets: {
         Row: {
           id: string;
-          user_id: string;
+          user_id: string | null;
           course_id: string | null;
           bucket: string;
           storage_path: string;
@@ -23,7 +23,7 @@ export type Database = {
         };
         Insert: {
           id?: string;
-          user_id: string;
+          user_id?: string | null;
           course_id?: string | null;
           bucket?: string;
           storage_path: string;
@@ -34,7 +34,7 @@ export type Database = {
         };
         Update: {
           id?: string;
-          user_id?: string;
+          user_id?: string | null;
           course_id?: string | null;
           bucket?: string;
           storage_path?: string;
@@ -42,6 +42,153 @@ export type Database = {
           mime_type?: string | null;
           bytes?: number | null;
           created_at?: string;
+        };
+        Relationships: [];
+      };
+      billing_export_events: {
+        Row: {
+          id: string;
+          user_id: string;
+          subscription_id: string;
+          course_id: string;
+          export_format: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          subscription_id: string;
+          course_id: string;
+          export_format: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          subscription_id?: string;
+          course_id?: string;
+          export_format?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      billing_subscription_memberships: {
+        Row: {
+          id: string;
+          user_id: string;
+          subscription_id: string;
+          plan_key: string;
+          authors_limit: number;
+          monthly_exports_limit: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          subscription_id: string;
+          plan_key: string;
+          authors_limit: number;
+          monthly_exports_limit: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          subscription_id?: string;
+          plan_key?: string;
+          authors_limit?: number;
+          monthly_exports_limit?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      billing_team_invites: {
+        Row: {
+          id: string;
+          subscription_id: string;
+          invited_by_user_id: string;
+          email_normalized: string;
+          token: string;
+          status: string;
+          plan_key: string;
+          authors_limit: number;
+          monthly_exports_limit: number;
+          expires_at: string;
+          accepted_user_id: string | null;
+          accepted_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          subscription_id: string;
+          invited_by_user_id: string;
+          email_normalized: string;
+          token: string;
+          status?: string;
+          plan_key: string;
+          authors_limit: number;
+          monthly_exports_limit: number;
+          expires_at: string;
+          accepted_user_id?: string | null;
+          accepted_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          subscription_id?: string;
+          invited_by_user_id?: string;
+          email_normalized?: string;
+          token?: string;
+          status?: string;
+          plan_key?: string;
+          authors_limit?: number;
+          monthly_exports_limit?: number;
+          expires_at?: string;
+          accepted_user_id?: string | null;
+          accepted_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      billing_subscriptions: {
+        Row: {
+          id: string;
+          user_id: string | null;
+          subscription_id: string;
+          provider: string;
+          plan_key: string | null;
+          status: string;
+          last_event_type: string | null;
+          activated_at: string | null;
+          cancelled_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id?: string | null;
+          subscription_id: string;
+          provider?: string;
+          plan_key?: string | null;
+          status?: string;
+          last_event_type?: string | null;
+          activated_at?: string | null;
+          cancelled_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string | null;
+          subscription_id?: string;
+          provider?: string;
+          plan_key?: string | null;
+          status?: string;
+          last_event_type?: string | null;
+          activated_at?: string | null;
+          cancelled_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
         };
         Relationships: [];
       };

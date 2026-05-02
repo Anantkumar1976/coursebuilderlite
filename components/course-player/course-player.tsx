@@ -165,8 +165,6 @@ export function CoursePlayer({
 
   const clampedIndex = total === 0 ? 0 : Math.min(index, total - 1);
   const current = flat[clampedIndex];
-  const totalLessons = lessons.length;
-
   const currentLessonId = current?.lessonId ?? null;
 
   const lessonAssessmentPageIds = useMemo(() => {
@@ -405,6 +403,7 @@ export function CoursePlayer({
   }
 
   const lessonOrdinal = (current?.lessonIndex ?? 0) + 1;
+  const currentLessonTitle = current?.lessonTitle ?? "Untitled lesson";
   const pagesInLesson =
     lessons[current?.lessonIndex ?? 0]?.pages.length ?? 0;
   const pageOrdinalInLesson = (current?.pageIndexInLesson ?? 0) + 1;
@@ -477,7 +476,7 @@ export function CoursePlayer({
 
             <div className="min-w-0 flex-1 text-center">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                Lesson {lessonOrdinal} of {totalLessons}
+                Lesson {lessonOrdinal}: {currentLessonTitle}
               </p>
               <p className="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">
                 Page {pageOrdinalInLesson} of {pagesInLesson} in this lesson

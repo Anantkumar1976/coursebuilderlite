@@ -247,6 +247,7 @@ export function defaultPageContent(
         logoAssetId: null,
         logoUrl: "",
         logoAlt: "",
+        showPrintCertificate: true,
       };
     case "mcq":
       return {

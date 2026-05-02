@@ -50,16 +50,44 @@ export async function updateCourseAppearanceSettings(
     highlight: String(formData.get("color_highlight") ?? ""),
   });
 
-  const { error } = await supabase
+  const customCss = (formData.get("custom_css") as string)?.trim() || null;
+
+  const themeUpdate = {
+    theme_fonts: themeFontsToJson(fonts),
+    theme_colors: themeColorsToJson(colors),
+  };
+
+  let { error } = await supabase
     .from("courses")
-    .update({
-      theme_fonts: themeFontsToJson(fonts),
-      theme_colors: themeColorsToJson(colors),
-    })
+    .update({ ...themeUpdate, custom_css: customCss })
     .eq("id", courseId);
 
   if (error) {
-    console.error(error);
+    const msg = (error.message ?? "").toLowerCase();
+    const looksLikeMissingCustomCss = msg.includes("custom_css");
+    if (looksLikeMissingCustomCss) {
+      const { error: err2 } = await supabase
+        .from("courses")
+        .update(themeUpdate)
+        .eq("id", courseId);
+      if (!err2) {
+        console.warn(
+          "[updateCourseAppearanceSettings] custom_css column missing; saved theme only. Apply migrations for custom CSS.",
+        );
+        error = null;
+      } else {
+        error = err2;
+      }
+    }
+  }
+
+  if (error) {
+    console.error("[updateCourseAppearanceSettings]", courseId, {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
     redirect(`/courses/${courseId}?error=save-failed`);
   }
 

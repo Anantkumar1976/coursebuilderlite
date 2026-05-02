@@ -17,7 +17,11 @@ import { getSignedUrlsForAssetIds } from "@/lib/assets/signed-urls";
 import { parseThemeColors, parseThemeFonts } from "@/lib/course-theme/theme";
 import { createClient } from "@/lib/supabase/server";
 
-function settingsMessage(error: string | null, saved: boolean) {
+function settingsMessage(
+  error: string | null,
+  saved: boolean,
+  errorDetail: string | null,
+) {
   if (saved) {
     return (
       <p className="text-sm text-emerald-700 dark:text-emerald-400" role="status">
@@ -33,10 +37,45 @@ function settingsMessage(error: string | null, saved: boolean) {
     );
   }
   if (error === "save-failed") {
+    let decoded = "";
+    if (errorDetail) {
+      try {
+        decoded = decodeURIComponent(errorDetail).trim();
+      } catch {
+        decoded = "";
+      }
+    }
     return (
-      <p className="text-sm text-red-600 dark:text-red-400" role="alert">
-        Could not save settings. Try again.
-      </p>
+      <div className="space-y-2" role="alert">
+        <p className="text-sm font-medium text-red-600 dark:text-red-400">
+          Could not save settings.
+        </p>
+        {decoded ? (
+          <pre className="max-w-xl overflow-x-auto whitespace-pre-wrap break-words rounded-lg border border-red-200 bg-red-50 p-3 font-mono text-xs text-red-950 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-100">
+            {decoded}
+          </pre>
+        ) : (
+          <p className="text-xs text-red-700/90 dark:text-red-300/90">
+            Apply pending Supabase migrations (especially{" "}
+            <code className="rounded bg-red-100 px-1 dark:bg-red-900/80">
+              navigation_flow
+            </code>
+            ,{" "}
+            <code className="rounded bg-red-100 px-1 dark:bg-red-900/80">
+              attempts_limit
+            </code>
+            ,{" "}
+            <code className="rounded bg-red-100 px-1 dark:bg-red-900/80">
+              assessment_attempts_limit
+            </code>
+            ) or check the server console for{" "}
+            <code className="rounded bg-red-100 px-1 dark:bg-red-900/80">
+              [updateCourseSettings]
+            </code>
+            .
+          </p>
+        )}
+      </div>
     );
   }
   return null;
@@ -47,12 +86,13 @@ export default async function CourseDetailPage({
   searchParams,
 }: {
   params: Promise<{ courseId: string }>;
-  searchParams: Promise<{ error?: string; saved?: string }>;
+  searchParams: Promise<{ error?: string; saved?: string; e?: string }>;
 }) {
   const { courseId } = await params;
   const sp = await searchParams;
   const saved = sp.saved === "1";
   const err = sp.error ?? null;
+  const saveErrorDetail = sp.e ?? null;
 
   const supabase = await createClient();
   // Use * so missing migrations (extra columns) do not make this query fail with 404.
@@ -271,6 +311,26 @@ export default async function CourseDetailPage({
                   />
                 </div>
               </div>
+              <div className="flex flex-col gap-1.5">
+                <label
+                  htmlFor="custom_css"
+                  className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                >
+                  Custom CSS (advanced, optional)
+                </label>
+                <textarea
+                  id="custom_css"
+                  name="custom_css"
+                  rows={8}
+                  defaultValue={course.custom_css ?? ""}
+                  placeholder=".cb-rich h2 { color: #1d4ed8; }"
+                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 font-mono text-xs text-zinc-900 outline-none ring-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+                />
+                <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+                  Applied to the learner player and SCORM export. Save with
+                  &quot;Save appearance&quot; below.
+                </p>
+              </div>
               <button
                 type="submit"
                 className="inline-flex h-10 w-fit items-center justify-center rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
@@ -391,26 +451,6 @@ export default async function CourseDetailPage({
           />
           <div className="flex flex-col gap-1.5">
             <label
-              htmlFor="custom_css"
-              className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
-              Custom CSS (advanced, optional)
-            </label>
-            <textarea
-              id="custom_css"
-              name="custom_css"
-              rows={8}
-              defaultValue={course.custom_css ?? ""}
-              placeholder=".cb-rich h2 { color: #1d4ed8; }"
-              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 font-mono text-xs text-zinc-900 outline-none ring-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
-            />
-            <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
-              Applied to the learner player and SCORM output. Use this for
-              advanced look-and-feel changes beyond theme controls.
-            </p>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label
               htmlFor="scorm_passing_score_percent"
               className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
             >
@@ -443,7 +483,7 @@ export default async function CourseDetailPage({
               className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
             />
           </div>
-          {settingsMessage(err, saved)}
+          {settingsMessage(err, saved, saveErrorDetail)}
           <button
             type="submit"
             className="inline-flex h-10 w-fit items-center justify-center rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
@@ -478,6 +518,18 @@ export default async function CourseDetailPage({
             className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
           >
             Download SCORM 1.2
+          </a>
+          <a
+            href={`/api/courses/${courseId}/export/scorm-2004`}
+            className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+          >
+            Download SCORM 2004
+          </a>
+          <a
+            href={`/api/courses/${courseId}/export/standalone`}
+            className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+          >
+            Download Standalone HTML
           </a>
         </div>
       </section>

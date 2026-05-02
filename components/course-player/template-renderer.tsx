@@ -25,6 +25,7 @@ import {
   writePageAssessment,
 } from "@/lib/course-player/lesson-assessment";
 import { videoEmbedUrl } from "@/lib/course-player/embed-url";
+import { PRODUCT_LOGO_SRC } from "@/lib/branding/site";
 import {
   IMAGE_CAROUSEL_CAPTION_MODE_LABELS,
   IMAGE_GRID_LAYOUT_LABELS,
@@ -401,7 +402,7 @@ function CourseCompletionBlock({
   scorePercent: number | null;
   logoSrc: string | null;
 }) {
-  function handlePrintCertificate() {
+  async function handlePrintCertificate() {
     const now = new Date();
     const date = now.toLocaleDateString();
     const time = now.toLocaleTimeString();
@@ -409,9 +410,10 @@ function CourseCompletionBlock({
       hasFinalAssessment && typeof scorePercent === "number"
         ? `<p><strong>Passing Score:</strong> ${scorePercent}%</p>`
         : "";
-    const logoMarkup = logoSrc
-      ? `<img class="logo-img" src="${escapeAttrLite(logoSrc)}" alt="Company logo"/>`
-      : `<div class="logo-placeholder">LOGO</div>`;
+    const printLogoSrc =
+      logoSrc?.trim() ||
+      `${window.location.origin}${PRODUCT_LOGO_SRC}`;
+    const logoMarkup = `<img class="logo-img" src="${escapeAttrLite(printLogoSrc)}" alt="Akhila"/>`;
     const html = `<!doctype html><html><head><meta charset="utf-8"/><title>Certificate</title><style>@page{size:A4;margin:16mm}body{font-family:Georgia,"Times New Roman",serif;color:#10213a;background:#fff} .sheet{max-width:980px;margin:0 auto;border:12px solid #123a66;padding:12px} .inner{border:2px solid #caa85c;padding:28px 32px 36px} .brand{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px} .logo-box{width:88px;height:88px;border:2px solid #123a66;border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fff}.logo-placeholder{font:700 14px/1 Arial,sans-serif;color:#123a66;letter-spacing:.08em}.logo-img{width:100%;height:100%;object-fit:contain} .brand h1{margin:0;font:700 18px/1.2 Arial,sans-serif;color:#123a66;text-transform:uppercase;letter-spacing:.08em} .title{margin:18px 0 8px;text-align:center;font:700 40px/1.1 Georgia,serif;color:#0f2745} .lead{margin:0 0 18px;text-align:center;font:400 18px/1.6 Georgia,serif} .meta{margin:22px auto 0;max-width:640px;border-top:1px solid #d8c089;padding-top:14px;font:400 16px/1.7 Georgia,serif} .meta p{margin:4px 0} .sig-wrap{margin-top:38px;display:flex;justify-content:flex-end} .sig{width:240px;text-align:center;font:400 12px/1.2 Arial,sans-serif;color:#334} .sig-line{border-top:1px solid #334;margin-bottom:6px;height:0} .hint{font:italic 13px/1.4 Georgia,serif;color:#5d6a7a;margin-top:2px}.course-line{font-weight:700}</style></head><body><section class="sheet"><div class="inner"><header class="brand"><h1>Course Completion Certificate</h1><div class="logo-box">${logoMarkup}</div></header><h2 class="title">Certificate</h2><p class="lead">Congratulations! You have completed the course <span class="course-line">${escapeHtmlLite(courseTitle)}</span></p><div class="meta"><p><strong>Learner:</strong> ${escapeHtmlLite(learnerName)}</p><p><strong>Date:</strong> ${escapeHtmlLite(date)}</p><p><strong>Time:</strong> ${escapeHtmlLite(time)}</p>${scoreLine}</div><div class="sig-wrap"><div class="sig"><div class="sig-line"></div><div>Authorized Signature (optional)</div><div class="hint">Signature line can be left blank</div></div></div></div></section></body></html>`;
 
     const iframe = document.createElement("iframe");
@@ -431,14 +433,43 @@ function CourseCompletionBlock({
     doc.open();
     doc.write(html);
     doc.close();
-    setTimeout(() => {
-      try {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
-      } finally {
-        setTimeout(() => iframe.remove(), 500);
-      }
-    }, 120);
+
+    const win = iframe.contentWindow;
+    if (!win) {
+      iframe.remove();
+      return;
+    }
+
+    const waitForLogo = () =>
+      new Promise<void>((resolve) => {
+        const d = iframe.contentDocument;
+        if (!d) {
+          resolve();
+          return;
+        }
+        const img = d.querySelector<HTMLImageElement>(".logo-img");
+        if (!img || img.complete) {
+          resolve();
+          return;
+        }
+        let settled = false;
+        const done = () => {
+          if (settled) return;
+          settled = true;
+          resolve();
+        };
+        img.addEventListener("load", done, { once: true });
+        img.addEventListener("error", done, { once: true });
+        window.setTimeout(done, 1500);
+      });
+
+    await waitForLogo();
+    try {
+      win.focus();
+      win.print();
+    } finally {
+      window.setTimeout(() => iframe.remove(), 500);
+    }
   }
 
   if (!unlocked) {
@@ -455,13 +486,17 @@ function CourseCompletionBlock({
         Congratulations! You have completed the course {courseTitle}.
       </p>
       <RichBodyHtml html={content.summary} />
-      <button
-        type="button"
-        onClick={handlePrintCertificate}
-        className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
-      >
-        Print Certificate
-      </button>
+      {content.showPrintCertificate !== false ? (
+        <button
+          type="button"
+          onClick={() => {
+            void handlePrintCertificate();
+          }}
+          className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+        >
+          Print Certificate
+        </button>
+      ) : null}
     </div>
   );
 }

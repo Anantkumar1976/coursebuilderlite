@@ -170,6 +170,7 @@ export type PageContentV1 =
       logoAssetId?: string | null;
       logoUrl: string;
       logoAlt: string;
+      showPrintCertificate?: boolean;
     }
   | {
       v: 1;

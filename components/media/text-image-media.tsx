@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { buildAssetStoragePath } from "@/lib/assets/storage-path";
 import type { PageContentV1 } from "@/lib/page-builder";
@@ -11,7 +11,15 @@ export type CourseAssetLite = {
   filename: string;
   mime_type: string | null;
   bytes: number | null;
+  bucket: string;
+  storage_path: string;
 };
+
+export function isCourseImageAsset(a: CourseAssetLite): boolean {
+  const mime = a.mime_type?.toLowerCase() ?? "";
+  if (mime.startsWith("image/")) return true;
+  return /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i.test(a.filename);
+}
 
 export type TextImageImageValue = {
   imageAssetId?: string | null;
@@ -49,6 +57,10 @@ export function TextImageImagePanel({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  /** Instant preview while a file is uploading (revoked after server preview loads). */
+  const [uploadObjectUrl, setUploadObjectUrl] = useState<string | null>(null);
+  const uploadObjectUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     const assetId = value.imageAssetId;
@@ -75,10 +87,34 @@ export function TextImageImagePanel({
     };
   }, [value.imageAssetId]);
 
+  useEffect(() => {
+    if (!uploadObjectUrl) return;
+    if (value.imageAssetId && previewUrl) {
+      URL.revokeObjectURL(uploadObjectUrl);
+      uploadObjectUrlRef.current = null;
+      setUploadObjectUrl(null);
+    }
+  }, [value.imageAssetId, previewUrl, uploadObjectUrl]);
+
+  useEffect(() => {
+    if (value.imageAssetId) return;
+    if (uploadObjectUrlRef.current) {
+      URL.revokeObjectURL(uploadObjectUrlRef.current);
+      uploadObjectUrlRef.current = null;
+    }
+    setUploadObjectUrl(null);
+  }, [value.imageAssetId]);
+
   const displaySrc =
-    value.imageAssetId && previewUrl
+    uploadObjectUrl ||
+    (value.imageAssetId && previewUrl
       ? previewUrl
-      : value.imageUrl.trim() || null;
+      : value.imageUrl.trim() || null);
+
+  const imageLibraryAssets = useMemo(
+    () => courseAssets.filter(isCourseImageAsset),
+    [courseAssets],
+  );
 
   const handleFile = useCallback(
     async (file: File | null) => {
@@ -88,6 +124,13 @@ export function TextImageImagePanel({
         return;
       }
       setUploadError(null);
+      if (uploadObjectUrlRef.current) {
+        URL.revokeObjectURL(uploadObjectUrlRef.current);
+        uploadObjectUrlRef.current = null;
+      }
+      const localUrl = URL.createObjectURL(file);
+      uploadObjectUrlRef.current = localUrl;
+      setUploadObjectUrl(localUrl);
       setUploading(true);
       try {
         const supabase = createClient();
@@ -96,6 +139,11 @@ export function TextImageImagePanel({
         } = await supabase.auth.getUser();
         if (!user) {
           setUploadError("You must be signed in to upload.");
+          if (uploadObjectUrlRef.current) {
+            URL.revokeObjectURL(uploadObjectUrlRef.current);
+            uploadObjectUrlRef.current = null;
+          }
+          setUploadObjectUrl(null);
           return;
         }
 
@@ -120,6 +168,11 @@ export function TextImageImagePanel({
           });
         if (upErr) {
           setUploadError(upErr.message);
+          if (uploadObjectUrlRef.current) {
+            URL.revokeObjectURL(uploadObjectUrlRef.current);
+            uploadObjectUrlRef.current = null;
+          }
+          setUploadObjectUrl(null);
           return;
         }
 
@@ -137,6 +190,11 @@ export function TextImageImagePanel({
         if (insErr) {
           await supabase.storage.from("assets").remove([storagePath]);
           setUploadError(insErr.message);
+          if (uploadObjectUrlRef.current) {
+            URL.revokeObjectURL(uploadObjectUrlRef.current);
+            uploadObjectUrlRef.current = null;
+          }
+          setUploadObjectUrl(null);
           return;
         }
 
@@ -146,6 +204,12 @@ export function TextImageImagePanel({
           imageUrl: "",
         });
         onAssetsUpdated();
+      } catch {
+        if (uploadObjectUrlRef.current) {
+          URL.revokeObjectURL(uploadObjectUrlRef.current);
+          uploadObjectUrlRef.current = null;
+        }
+        setUploadObjectUrl(null);
       } finally {
         setUploading(false);
       }
@@ -155,11 +219,22 @@ export function TextImageImagePanel({
 
   return (
     <div className="space-y-4">
+      <CourseImageLibraryModal
+        open={libraryOpen}
+        onClose={() => setLibraryOpen(false)}
+        assets={imageLibraryAssets}
+        selectedId={value.imageAssetId ?? null}
+        onPick={(id) => {
+          onChange({ ...value, imageAssetId: id, imageUrl: "" });
+          setLibraryOpen(false);
+        }}
+      />
+
       <div>
         <p className={labelClass()}>Image</p>
         <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-500">
-          Upload a file to store it in your course (stable in preview and SCORM),
-          or paste an external URL below.
+          Upload applies to this page immediately. You can also choose an image
+          already stored in this course, or paste an external URL below.
         </p>
       </div>
 
@@ -189,7 +264,16 @@ export function TextImageImagePanel({
               })
             }
           >
-            Clear uploaded image
+            Remove image
+          </button>
+        ) : null}
+        {imageLibraryAssets.length > 0 ? (
+          <button
+            type="button"
+            className="rounded-lg border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
+            onClick={() => setLibraryOpen(true)}
+          >
+            Pick from course library…
           </button>
         ) : null}
       </div>
@@ -198,39 +282,6 @@ export function TextImageImagePanel({
         <p className="text-sm text-red-600 dark:text-red-400" role="alert">
           {uploadError}
         </p>
-      ) : null}
-
-      {courseAssets.length > 0 ? (
-        <div>
-          <p className={labelClass()}>Or pick from this course</p>
-          <div className="mt-2 flex max-h-40 flex-col gap-1 overflow-y-auto rounded-lg border border-zinc-200 p-2 dark:border-zinc-700">
-            {courseAssets.map((a) => (
-              <button
-                key={a.id}
-                type="button"
-                className={`rounded-md px-2 py-1.5 text-left text-sm ${
-                  value.imageAssetId === a.id
-                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                    : "text-zinc-800 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                }`}
-                onClick={() =>
-                  onChange({
-                    ...value,
-                    imageAssetId: a.id,
-                    imageUrl: "",
-                  })
-                }
-              >
-                <span className="block truncate">{a.filename}</span>
-                {a.bytes != null ? (
-                  <span className="text-xs opacity-70">
-                    {(a.bytes / 1024).toFixed(1)} KB
-                  </span>
-                ) : null}
-              </button>
-            ))}
-          </div>
-        </div>
       ) : null}
 
       <div>
@@ -284,6 +335,152 @@ export function TextImageImagePanel({
       ) : (
         <p className="text-sm text-zinc-500">No image selected yet.</p>
       )}
+    </div>
+  );
+}
+
+type LibraryModalProps = {
+  open: boolean;
+  onClose: () => void;
+  assets: CourseAssetLite[];
+  selectedId: string | null;
+  onPick: (assetId: string) => void;
+};
+
+function CourseImageLibraryModal({
+  open,
+  onClose,
+  assets,
+  selectedId,
+  onPick,
+}: LibraryModalProps) {
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoading(true);
+    setThumbs({});
+    (async () => {
+      const supabase = createClient();
+      const entries = await Promise.all(
+        assets.map(async (a) => {
+          const { data } = await supabase.storage
+            .from(a.bucket)
+            .createSignedUrl(a.storage_path, 3600);
+          return [a.id, data?.signedUrl ?? ""] as const;
+        }),
+      );
+      if (cancelled) return;
+      const next: Record<string, string> = {};
+      for (const [id, url] of entries) {
+        if (url) next[id] = url;
+      }
+      setThumbs(next);
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, assets]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-end justify-center p-4 sm:items-center">
+      <button
+        type="button"
+        aria-label="Close image library"
+        className="absolute inset-0 bg-black/50"
+        onClick={onClose}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cbl-image-lib-title"
+        className="relative z-10 flex max-h-[min(32rem,85vh)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-950"
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
+          <div>
+            <h2
+              id="cbl-image-lib-title"
+              className="text-sm font-semibold text-zinc-900 dark:text-zinc-50"
+            >
+              Course image library
+            </h2>
+            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+              Tap a thumbnail to use that image on this page.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          {assets.length === 0 ? (
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              No images in this course yet. Upload an image on any page (or
+              here) to build your library.
+            </p>
+          ) : loading ? (
+            <p className="text-sm text-zinc-500">Loading thumbnails…</p>
+          ) : (
+            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+              {assets.map((a) => {
+                const src = thumbs[a.id];
+                const isSel = selectedId === a.id;
+                return (
+                  <li key={a.id}>
+                    <button
+                      type="button"
+                      onClick={() => onPick(a.id)}
+                      className={`w-full overflow-hidden rounded-xl border text-left transition-shadow ${
+                        isSel
+                          ? "border-zinc-900 ring-2 ring-zinc-900 dark:border-zinc-100 dark:ring-zinc-100"
+                          : "border-zinc-200 hover:border-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-500"
+                      }`}
+                    >
+                      <div className="aspect-square bg-zinc-100 dark:bg-zinc-900">
+                        {src ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={src}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center px-2 text-center text-xs text-zinc-500">
+                            Preview unavailable
+                          </div>
+                        )}
+                      </div>
+                      <p className="truncate px-2 py-1.5 text-xs font-medium text-zinc-800 dark:text-zinc-200">
+                        {a.filename}
+                      </p>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

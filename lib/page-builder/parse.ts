@@ -324,6 +324,10 @@ export function parsePageContent(raw: Json | undefined): PageContentV1 {
             : null,
         logoUrl: typeof o.logoUrl === "string" ? o.logoUrl : "",
         logoAlt: typeof o.logoAlt === "string" ? o.logoAlt : "",
+        showPrintCertificate:
+          typeof o.showPrintCertificate === "boolean"
+            ? o.showPrintCertificate
+            : true,
       };
     case "mcq": {
       const options = Array.isArray(o.options)

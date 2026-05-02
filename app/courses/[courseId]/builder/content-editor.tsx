@@ -1060,6 +1060,20 @@ export function ContentEditor({
               />
             </div>
           </div>
+          <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={content.showPrintCertificate !== false}
+              onChange={(e) =>
+                onChange({
+                  ...content,
+                  showPrintCertificate: e.target.checked,
+                })
+              }
+            />
+            Enable "Print Certificate" button on the completion page
+          </label>
         </div>
       ) : null}
 

@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 
+import {
+  BillingEnforcementError,
+  ensureAuthorSeatAvailable,
+  ensureMonthlyExportLimitAvailable,
+  recordExportEvent,
+} from "@/lib/billing/enforcement";
 import { reportScormExportFailure } from "@/lib/monitoring/errors";
 import {
   buildScormZipBuffer,
@@ -22,6 +28,8 @@ export async function GET(
     if (!user) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
+    await ensureAuthorSeatAvailable(supabase, user);
+    await ensureMonthlyExportLimitAvailable(supabase, user);
 
     const { data: course, error } = await supabase
       .from("courses")
@@ -76,6 +84,7 @@ export async function GET(
     });
 
     const filename = scormZipFilename(course.title);
+    await recordExportEvent(supabase, user, courseId, "scorm12");
 
     return new NextResponse(new Uint8Array(buf), {
       headers: {
@@ -84,6 +93,10 @@ export async function GET(
       },
     });
   } catch (err) {
+    if (err instanceof BillingEnforcementError) {
+      const status = err.code === "export-limit-reached" ? 429 : 403;
+      return new NextResponse(err.message, { status });
+    }
     reportScormExportFailure(err, { courseId });
     console.error("[scorm-export]", courseId, err);
     return new NextResponse("Export failed", { status: 500 });

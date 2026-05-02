@@ -21,6 +21,7 @@ type Props = {
   pageCount: number;
   themeColorsJson: Json;
   attemptsLimit: number | null;
+  manualMode?: boolean;
 };
 
 export function CourseLaunchActions({
@@ -28,6 +29,7 @@ export function CourseLaunchActions({
   pageCount,
   themeColorsJson,
   attemptsLimit,
+  manualMode = false,
 }: Props) {
   const colors = parseThemeColors(themeColorsJson);
   const router = useRouter();
@@ -80,7 +82,7 @@ export function CourseLaunchActions({
     return (
       <div className="flex flex-wrap gap-3">
         <span className="inline-flex h-12 cursor-not-allowed items-center justify-center rounded-xl bg-zinc-200 px-8 text-sm font-semibold text-zinc-500 dark:bg-zinc-800">
-          Add pages to begin
+          {manualMode ? "Add topics to open manual" : "Add pages to begin"}
         </span>
       </div>
     );
@@ -93,13 +95,13 @@ export function CourseLaunchActions({
           role="alert"
           className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-100"
         >
-          <p className="font-semibold">Course locked</p>
+          <p className="font-semibold">{manualMode ? "Manual locked" : "Course locked"}</p>
           <p className="mt-1">
             You&rsquo;ve used all{" "}
             {attemptsLimit === 1
               ? "of your attempt"
               : `${attemptsLimit} attempts`}{" "}
-            for this course. Contact your administrator to request additional
+            for this {manualMode ? "manual" : "course"}. Contact your administrator to request additional
             access.
           </p>
         </div>
@@ -113,14 +115,20 @@ export function CourseLaunchActions({
           className="inline-flex h-12 items-center justify-center rounded-xl px-8 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           style={{ backgroundColor: colors.button }}
         >
-          {canResume ? "Resume course" : "Begin course"}
+          {canResume
+            ? manualMode
+              ? "Resume manual"
+              : "Resume course"
+            : manualMode
+              ? "Open manual"
+              : "Begin course"}
         </button>
         {locked ? (
           <Link
             href={`/courses/${courseId}`}
             className="text-sm font-medium text-zinc-600 underline-offset-4 hover:underline dark:text-zinc-300"
           >
-            Back to course
+            {manualMode ? "Back to manual" : "Back to course"}
           </Link>
         ) : null}
       </div>

@@ -6,9 +6,12 @@ import { extensionFromFilename } from "@/lib/assets/storage-path";
 import { parsePageContent } from "@/lib/page-builder";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
-import { buildScormDriverWithCourseSettings } from "./apply-course-settings";
+import {
+  buildScorm2004DriverWithCourseSettings,
+  buildScormDriverWithCourseSettings,
+} from "./apply-course-settings";
 import { buildScormIndexHtml } from "./build-index-html";
-import { buildImsManifest } from "./build-manifest";
+import { buildImsManifest, buildImsManifest2004 } from "./build-manifest";
 import { pageContentToHtml } from "./page-to-html";
 
 export type PageRow = {
@@ -30,7 +33,9 @@ export async function buildScormZipBuffer(options: {
   courseDescription: string | null;
   estimatedDurationMinutes: number | null;
   customCss: string | null;
+  format?: "scorm12" | "scorm2004" | "standalone";
 }): Promise<Buffer> {
+  const format = options.format ?? "scorm12";
   const assetIds = collectImageAssetIdsFromPages(options.pages);
   const scormRelative: Record<string, string> = {};
   const packageFiles: string[] = [];
@@ -81,19 +86,35 @@ export async function buildScormZipBuffer(options: {
     lang: options.locale,
     customCss: options.customCss,
   });
-  const manifest = buildImsManifest({
-    courseTitle: options.courseTitle,
-    manifestId: `cbl-${options.courseId}`,
-    packageFiles,
-    locale: options.locale,
-    manifestSummary,
-    estimatedDurationMinutes: options.estimatedDurationMinutes,
-  });
+  const manifest =
+    format === "scorm2004"
+      ? buildImsManifest2004({
+          courseTitle: options.courseTitle,
+          manifestId: `cbl-${options.courseId}`,
+          packageFiles,
+          locale: options.locale,
+          manifestSummary,
+          estimatedDurationMinutes: options.estimatedDurationMinutes,
+        })
+      : buildImsManifest({
+          courseTitle: options.courseTitle,
+          manifestId: `cbl-${options.courseId}`,
+          packageFiles,
+          locale: options.locale,
+          manifestSummary,
+          estimatedDurationMinutes: options.estimatedDurationMinutes,
+        });
 
-  const driverJs = buildScormDriverWithCourseSettings(
-    options.scormPassingScorePercent,
-    options.assessmentAttemptsLimit,
-  );
+  const driverJs =
+    format === "scorm2004"
+      ? buildScorm2004DriverWithCourseSettings(
+          options.scormPassingScorePercent,
+          options.assessmentAttemptsLimit,
+        )
+      : buildScormDriverWithCourseSettings(
+          options.scormPassingScorePercent,
+          options.assessmentAttemptsLimit,
+        );
 
   const zip = new JSZip();
 
@@ -108,7 +129,9 @@ export async function buildScormZipBuffer(options: {
     zip.file(zipPath, buf);
   }
 
-  zip.file("imsmanifest.xml", manifest);
+  if (format !== "standalone") {
+    zip.file("imsmanifest.xml", manifest);
+  }
   zip.file("index.html", indexHtml);
   zip.file("scormdriver.js", driverJs);
 
@@ -126,4 +149,24 @@ export function scormZipFilename(courseTitle: string): string {
     .replace(/^-|-$/g, "")
     .slice(0, 48);
   return `${base || "course"}-scorm12.zip`;
+}
+
+export function scorm2004ZipFilename(courseTitle: string): string {
+  const base = courseTitle
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 48);
+  return `${base || "course"}-scorm2004.zip`;
+}
+
+export function standaloneZipFilename(courseTitle: string): string {
+  const base = courseTitle
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 48);
+  return `${base || "course"}-standalone-html.zip`;
 }

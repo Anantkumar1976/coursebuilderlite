@@ -79,3 +79,63 @@ ${extraXml ? `${extraXml}\n` : ""}    </resource>
 `;
 
 }
+
+/** Minimal SCORM 2004 4th Edition imsmanifest.xml (single SCO). */
+export function buildImsManifest2004(options: {
+  courseTitle: string;
+  manifestId: string;
+  packageFiles?: string[];
+  locale?: string;
+  manifestSummary?: string | null;
+  estimatedDurationMinutes?: number | null;
+}): string {
+  const title = escapeXml(options.courseTitle);
+  const mid = escapeXml(options.manifestId.replace(/[^a-zA-Z0-9_-]/g, "-"));
+  const extraFiles = options.packageFiles ?? [];
+  const extraXml = extraFiles
+    .map((href) => `      <file href="${escapeXml(href)}"/>`)
+    .join("\n");
+
+  const lang = (options.locale ?? "en").trim() || "en";
+  const langAttr = escapeXml(lang);
+  const summary = (options.manifestSummary ?? "").trim();
+  const summaryComment =
+    summary.length > 0
+      ? `\n  <!-- ${safeXmlComment(summary)} -->`
+      : "";
+  const dur = options.estimatedDurationMinutes;
+  const durComment =
+    typeof dur === "number" && dur >= 0
+      ? `\n  <!-- typicalLearningTime ${isoDurationFromMinutes(dur)} -->`
+      : "";
+
+  return `<?xml version="1.0" encoding="UTF-8"?>${summaryComment}${durComment}
+<manifest identifier="${mid}" version="1.0" xml:lang="${langAttr}"
+  xmlns="http://www.imsglobal.org/xsd/imscp_v1p1"
+  xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_v1p3"
+  xmlns:adlseq="http://www.adlnet.org/xsd/adlseq_v1p3"
+  xmlns:adlnav="http://www.adlnet.org/xsd/adlnav_v1p3"
+  xmlns:imsss="http://www.imsglobal.org/xsd/imsss"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imscp_v1p1 imscp_v1p1.xsd http://www.adlnet.org/xsd/adlcp_v1p3 adlcp_v1p3.xsd http://www.adlnet.org/xsd/adlseq_v1p3 adlseq_v1p3.xsd http://www.adlnet.org/xsd/adlnav_v1p3 adlnav_v1p3.xsd http://www.imsglobal.org/xsd/imsss imsss_v1p0.xsd">
+  <metadata>
+    <schema>ADL SCORM</schema>
+    <schemaversion>2004 4th Edition</schemaversion>
+  </metadata>
+  <organizations default="ORG1">
+    <organization identifier="ORG1" structure="hierarchical">
+      <title>${title}</title>
+      <item identifier="ITEM1" identifierref="RES1" isvisible="true">
+        <title>${title}</title>
+      </item>
+    </organization>
+  </organizations>
+  <resources>
+    <resource identifier="RES1" type="webcontent" adlcp:scormType="sco" href="index.html">
+      <file href="index.html"/>
+      <file href="scormdriver.js"/>
+${extraXml ? `${extraXml}\n` : ""}    </resource>
+  </resources>
+</manifest>
+`;
+}

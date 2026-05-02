@@ -1,17 +1,38 @@
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import {
+  HEADER_PRODUCT_LABEL,
+  PRODUCT_LOGO_SRC,
+  PRODUCT_NAME,
+} from "@/lib/branding/site";
+import { getSafeInternalPath } from "@/lib/navigation/safe-next";
 import { createClient } from "@/lib/supabase/server";
 
 import { LoginForm } from "./login-form";
 
-export default async function LoginPage() {
+function getLoginErrorMessage(code: string | undefined) {
+  if (code === "subscription-inactive") {
+    return "Your subscription is inactive. Please reactivate it to continue.";
+  }
+  return null;
+}
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; next?: string }>;
+}) {
+  const params = await searchParams;
+  const err = getLoginErrorMessage(params.error);
+  const redirectNext = getSafeInternalPath(params.next);
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (user) {
-    redirect("/courses");
+    redirect(redirectNext);
   }
 
   return (
@@ -20,9 +41,19 @@ export default async function LoginPage() {
         <div className="mx-auto flex h-14 max-w-lg items-center justify-between px-4">
           <Link
             href="/"
-            className="text-sm font-semibold tracking-tight text-zinc-900 dark:text-zinc-50"
+            className="flex min-w-0 items-center gap-2 text-zinc-900 dark:text-zinc-50"
+            aria-label={PRODUCT_NAME}
           >
-            CourseBuilder Lite
+            <Image
+              src={PRODUCT_LOGO_SRC}
+              alt=""
+              width={120}
+              height={32}
+              className="h-7 w-auto shrink-0 object-contain object-left dark:brightness-[1.05]"
+            />
+            <span className="truncate text-sm font-semibold tracking-tight">
+              {HEADER_PRODUCT_LABEL}
+            </span>
           </Link>
         </div>
       </header>
@@ -32,8 +63,13 @@ export default async function LoginPage() {
           <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
             Use the email and password for your Supabase account.
           </p>
+          {err ? (
+            <p className="mt-3 text-sm text-red-600 dark:text-red-400" role="alert">
+              {err}
+            </p>
+          ) : null}
           <div className="mt-8">
-            <LoginForm />
+            <LoginForm redirectNext={params.next} />
           </div>
         </div>
       </main>

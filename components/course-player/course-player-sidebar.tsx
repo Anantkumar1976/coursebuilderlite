@@ -2,9 +2,35 @@
 
 import { useMemo } from "react";
 
-import type { ThemeFonts } from "@/lib/course-theme/theme";
 import type { NavigationFlow } from "@/lib/course-player/navigation-flow";
 import type { LessonNav } from "@/lib/course-player/types";
+import type { ThemeFonts } from "@/lib/course-theme/theme";
+
+/** Foreground hex for text/icons on top of `accentHex` (sRGB relative luminance). */
+function textOnAccent(accentHex: string): string {
+  const raw = accentHex.trim();
+  const t = raw.startsWith("#") ? raw : `#${raw}`;
+  let r: number;
+  let g: number;
+  let b: number;
+  if (t.length === 4) {
+    r = parseInt(t[1] + t[1], 16);
+    g = parseInt(t[2] + t[2], 16);
+    b = parseInt(t[3] + t[3], 16);
+  } else if (t.length === 7 || t.length === 9) {
+    r = parseInt(t.slice(1, 3), 16);
+    g = parseInt(t.slice(3, 5), 16);
+    b = parseInt(t.slice(5, 7), 16);
+  } else {
+    return "#ffffff";
+  }
+  const lin = (c: number) => {
+    const x = c / 255;
+    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+  };
+  const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return L > 0.55 ? "#18181b" : "#ffffff";
+}
 
 type Props = {
   courseTitle: string;
@@ -70,14 +96,17 @@ export function CoursePlayerSidebar({
 
   const progressHint =
     navigationFlow === "website"
-      ? "Scroll to read each section"
+      ? "Scroll to read each topic"
       : navigationFlow === "linear"
         ? "Pages unlock in order"
         : "Open any page from the outline";
+  const isWebsite = navigationFlow === "website";
+
+  const activeFg = useMemo(() => textOnAccent(accentColor), [accentColor]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="relative h-24 w-full shrink-0 overflow-hidden bg-zinc-800">
+      <div className="relative h-32 w-full shrink-0 overflow-hidden bg-zinc-800 sm:h-36">
         {bannerUrl ? (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
@@ -91,10 +120,10 @@ export function CoursePlayerSidebar({
             aria-hidden
           />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/75 to-transparent" />
-        <div className="absolute bottom-0 left-0 right-0 px-3 pb-2 pt-6">
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-black/10" />
+        <div className="absolute bottom-0 left-0 right-0 px-3 pb-3 pt-8">
           <p
-            className="line-clamp-2 font-semibold leading-tight text-white drop-shadow"
+            className="line-clamp-2 font-semibold leading-snug text-white drop-shadow"
             style={{
               fontFamily: themeFonts.courseTitle,
               fontSize: themeFonts.courseTitleSize,
@@ -112,7 +141,7 @@ export function CoursePlayerSidebar({
           aria-valuenow={progressPct}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label="Course progress"
+          aria-label={isWebsite ? "Manual reading progress" : "Course progress"}
         >
           <div
             className="h-full rounded-full transition-[width] duration-300"
@@ -120,7 +149,7 @@ export function CoursePlayerSidebar({
           />
         </div>
         <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-          {progressPct}% complete
+          {progressPct}% {isWebsite ? "read" : "complete"}
         </p>
         <p className="mt-1 text-[10px] leading-snug text-zinc-400 dark:text-zinc-500">
           {progressHint}
@@ -129,7 +158,7 @@ export function CoursePlayerSidebar({
 
       <nav
         className="min-h-0 flex-1 overflow-y-auto px-2 py-2"
-        aria-label="Course outline"
+        aria-label={isWebsite ? "Manual contents" : "Course outline"}
       >
         <ul className="space-y-0.5">
           {lessons.map((lesson) => {
@@ -154,6 +183,7 @@ export function CoursePlayerSidebar({
                       const active = flatIdx === activeFlatIndex;
                       const done = visitedPageIds.has(page.id);
                       const allowed = canGo(flatIdx);
+                      const showVisitedCheck = navigationFlow !== "website";
                       return (
                         <li key={page.id}>
                           <button
@@ -167,26 +197,43 @@ export function CoursePlayerSidebar({
                               !allowed
                                 ? "cursor-not-allowed opacity-50"
                                 : active
-                                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                                  : "text-zinc-700 hover:bg-zinc-200/70 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                                  ? "font-medium"
+                                  : isWebsite
+                                    ? "text-zinc-700 hover:text-zinc-950 dark:text-zinc-300 dark:hover:text-zinc-50"
+                                    : "text-zinc-700 hover:bg-zinc-200/70 dark:text-zinc-300 dark:hover:bg-zinc-800"
                             }`}
+                            style={
+                              active && allowed
+                                ? {
+                                    backgroundColor: accentColor,
+                                    color: activeFg,
+                                  }
+                                : undefined
+                            }
                           >
                             <span className="min-w-0 flex-1 truncate">
                               {page.title}
                             </span>
-                            <span
-                              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-bold ${
-                                done
-                                  ? "border-transparent text-white"
-                                  : "border-zinc-300 bg-transparent dark:border-zinc-600"
-                              }`}
-                              style={
-                                done ? { backgroundColor: accentColor } : undefined
-                              }
-                              aria-label={done ? "Visited" : "Not visited"}
-                            >
-                              {done ? "✓" : ""}
-                            </span>
+                            {showVisitedCheck ? (
+                              <span
+                                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-bold ${
+                                  done
+                                    ? "border-transparent"
+                                    : "border-zinc-300 bg-transparent dark:border-zinc-600"
+                                }`}
+                                style={
+                                  done
+                                    ? {
+                                        backgroundColor: accentColor,
+                                        color: activeFg,
+                                      }
+                                    : undefined
+                                }
+                                aria-label={done ? "Visited" : "Not visited"}
+                              >
+                                {done ? "✓" : ""}
+                              </span>
+                            ) : null}
                           </button>
                         </li>
                       );

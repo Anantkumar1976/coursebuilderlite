@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { CourseLaunch } from "@/components/course-player/course-launch";
 import { getSignedUrlsForAssetIds } from "@/lib/assets/signed-urls";
 import { parseAttemptsLimit } from "@/lib/course-player/attempts";
+import { parseNavigationFlow } from "@/lib/course-player/navigation-flow";
 import { parseThemeFonts } from "@/lib/course-theme/theme";
 import { createClient } from "@/lib/supabase/server";
 
@@ -40,6 +41,7 @@ export default async function CoursePlayLaunchPage({
   const signed = await getSignedUrlsForAssetIds(supabase, assetIds);
   const bannerUrl = bannerAssetId ? signed[bannerAssetId] ?? null : null;
   const themeFonts = parseThemeFonts(course.theme_fonts);
+  const manualMode = parseNavigationFlow(course.navigation_flow) === "website";
 
   return (
     <CourseLaunch
@@ -53,6 +55,7 @@ export default async function CoursePlayLaunchPage({
       pageCount={pageCount ?? 0}
       themeColorsJson={course.theme_colors ?? {}}
       attemptsLimit={parseAttemptsLimit(course.attempts_limit)}
+      manualMode={manualMode}
     />
   );
 }

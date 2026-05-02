@@ -17,6 +17,8 @@ type Props = {
   themeColorsJson: Json;
   /** Max course attempts; null = unlimited. */
   attemptsLimit: number | null;
+  /** Website/manual presentation mode. */
+  manualMode?: boolean;
 };
 
 export function CourseLaunch({
@@ -30,6 +32,7 @@ export function CourseLaunch({
   pageCount,
   themeColorsJson,
   attemptsLimit,
+  manualMode = false,
 }: Props) {
   return (
     <div className="flex min-h-[calc(100vh-3.5rem)] flex-col">
@@ -50,7 +53,7 @@ export function CourseLaunch({
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
         <div className="absolute bottom-0 left-0 right-0 px-4 pb-8 pt-12 sm:px-8">
           <p className="text-xs font-medium uppercase tracking-wide text-white/80">
-            Course
+            {manualMode ? "Manual" : "Course"}
           </p>
           <h1
             className="mt-2 font-bold tracking-tight text-white"
@@ -77,12 +80,16 @@ export function CourseLaunch({
           )}
           {lessonCount > 0 ? (
             <span>
-              {lessonCount} lesson{lessonCount === 1 ? "" : "s"}
-              {pageCount > 0 ? ` · ${pageCount} page${pageCount === 1 ? "" : "s"}` : ""}
+              {lessonCount} {manualMode ? "section" : "lesson"}
+              {lessonCount === 1 ? "" : "s"}
+              {pageCount > 0
+                ? ` · ${pageCount} ${manualMode ? "topic" : "page"}${pageCount === 1 ? "" : "s"}`
+                : ""}
             </span>
           ) : pageCount > 0 ? (
             <span>
-              {pageCount} page{pageCount === 1 ? "" : "s"}
+              {pageCount} {manualMode ? "topic" : "page"}
+              {pageCount === 1 ? "" : "s"}
             </span>
           ) : null}
         </div>
@@ -93,7 +100,7 @@ export function CourseLaunch({
           </p>
         ) : (
           <p className="mt-6 text-sm text-zinc-500">
-            No description yet. Add one in course settings.
+            No description yet. Add one in {manualMode ? "manual" : "course"} settings.
           </p>
         )}
 
@@ -103,13 +110,14 @@ export function CourseLaunch({
             pageCount={pageCount}
             themeColorsJson={themeColorsJson}
             attemptsLimit={attemptsLimit}
+            manualMode={manualMode}
           />
           <div className="flex flex-wrap gap-4 text-sm">
             <Link
               href={`/courses/${courseId}`}
               className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
             >
-              Course settings
+              {manualMode ? "Manual settings" : "Course settings"}
             </Link>
             <Link
               href={`/courses/${courseId}/builder`}

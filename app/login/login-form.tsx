@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { getSafeInternalPath } from "@/lib/navigation/safe-next";
 import { createClient } from "@/lib/supabase/client";
 
-export function LoginForm() {
+export function LoginForm({ redirectNext }: { redirectNext?: string | null }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -35,7 +36,7 @@ export function LoginForm() {
         setError(signError.message);
         return;
       }
-      router.push("/courses");
+      router.push(getSafeInternalPath(redirectNext));
       router.refresh();
     } catch (err) {
       const msg =
