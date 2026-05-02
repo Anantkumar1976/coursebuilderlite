@@ -23,17 +23,48 @@ export default async function CourseBuilderPage({
     notFound();
   }
 
-  const { data: pages } = await supabase
-    .from("pages")
-    .select("id, title, sort_order, content")
+  const { data: lessonRows, error: lessonsError } = await supabase
+    .from("lessons")
+    .select("id, title, sort_order")
     .eq("course_id", courseId)
     .order("sort_order", { ascending: true });
 
-  const initialPages = (pages ?? []).map((p) => ({
-    id: p.id,
-    title: p.title,
-    sort_order: p.sort_order,
-    content: parsePageContent(p.content),
+  const { data: pages, error: pagesError } = await supabase
+    .from("pages")
+    .select("id, title, sort_order, content, lesson_id")
+    .eq("course_id", courseId)
+    .order("sort_order", { ascending: true });
+
+  const lessonList = lessonsError || !lessonRows ? [] : lessonRows;
+  const pageList = pagesError || !pages ? [] : pages;
+
+  const initialLessons = lessonList.map((lesson) => ({
+    id: lesson.id,
+    title: lesson.title,
+    sort_order: lesson.sort_order,
+    pages: pageList
+      .filter((p) => p.lesson_id === lesson.id)
+      .map((p) => ({
+        id: p.id,
+        title: p.title,
+        sort_order: p.sort_order,
+        content: parsePageContent(p.content),
+      })),
+  }));
+
+  const { data: assetRows } = await supabase
+    .from("assets")
+    .select("id, filename, mime_type, bytes, created_at, bucket, storage_path")
+    .eq("course_id", courseId)
+    .order("created_at", { ascending: false });
+
+  const initialAssets = (assetRows ?? []).map((a) => ({
+    id: a.id,
+    filename: a.filename,
+    mime_type: a.mime_type,
+    bytes: a.bytes,
+    bucket: a.bucket,
+    storage_path: a.storage_path,
   }));
 
   return (
@@ -63,7 +94,8 @@ export default async function CourseBuilderPage({
       <PageBuilder
         courseId={course.id}
         courseTitle={course.title}
-        initialPages={initialPages}
+        initialLessons={initialLessons}
+        initialAssets={initialAssets}
       />
     </div>
   );

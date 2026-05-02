@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CourseBuilder Lite",
+  title: "Akhila Course Builder Light",
   description:
-    "Author responsive HTML5 SCORM 1.2 courses with structured templates—no branching, template-driven authoring.",
+    "Akhila Course Builder Light — author responsive courses with structured templates, assessments, and SCORM-ready export.",
 };
 
 export default function RootLayout({

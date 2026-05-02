@@ -9,6 +9,12 @@ function errorMessage(code: string | null) {
   if (code === "create-failed") {
     return "Could not create the course. Try again.";
   }
+  if (code === "author-limit") {
+    return "Your plan author limit has been reached.";
+  }
+  if (code === "billing-check-failed") {
+    return "Could not verify your subscription limits. Try again.";
+  }
   return null;
 }
 
