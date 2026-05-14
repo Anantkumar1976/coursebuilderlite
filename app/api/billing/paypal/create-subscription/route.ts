@@ -10,7 +10,41 @@ import {
 type PaypalCreateSubscriptionResponse = {
   id?: string;
   links?: Array<{ rel?: string; href?: string }>;
+  name?: string;
+  message?: string;
+  details?: unknown;
+  debug_id?: string;
 };
+
+function summarizePaypalApiError(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const o = body as Record<string, unknown>;
+  const name = typeof o.name === "string" ? o.name : "";
+  const message = typeof o.message === "string" ? o.message : "";
+  const details = o.details;
+  let detailSuffix = "";
+  if (Array.isArray(details) && details[0] && typeof details[0] === "object") {
+    const d0 = details[0] as Record<string, unknown>;
+    const desc = typeof d0.description === "string" ? d0.description : "";
+    const issue = typeof d0.issue === "string" ? d0.issue : "";
+    if (desc) detailSuffix = ` ${desc}`;
+    else if (issue) detailSuffix = ` (${issue})`;
+  }
+  const core = [message, name].filter(Boolean).join(" · ");
+  if (!core && !detailSuffix.trim()) return null;
+  return `${core}${detailSuffix}`.trim();
+}
+
+function getRequestOrigin(request: Request) {
+  const site = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/$/, "");
+  if (site) return site;
+  const vercel = process.env.VERCEL_URL?.trim().replace(/\/$/, "");
+  if (vercel) {
+    const host = vercel.replace(/^https?:\/\//i, "");
+    return `https://${host}`;
+  }
+  return new URL(request.url).origin;
+}
 
 function getSignupReturnUrls(origin: string, plan: PaypalPlanKey) {
   const returnUrl = new URL("/signup", origin);
@@ -41,7 +75,7 @@ export async function POST(request: Request) {
     }
 
     const token = await fetchPaypalAccessToken();
-    const { returnUrl, cancelUrl } = getSignupReturnUrls(new URL(request.url).origin, plan);
+    const { returnUrl, cancelUrl } = getSignupReturnUrls(getRequestOrigin(request), plan);
     const createResponse = await fetch(`${getPaypalBaseUrl()}/v1/billing/subscriptions`, {
       method: "POST",
       headers: {
@@ -63,8 +97,19 @@ export async function POST(request: Request) {
     const subscriptionData =
       (await createResponse.json().catch(() => ({}))) as PaypalCreateSubscriptionResponse;
     if (!createResponse.ok) {
+      const paypalHint = summarizePaypalApiError(subscriptionData);
+      console.warn(
+        "[paypal create-subscription]",
+        createResponse.status,
+        paypalHint ?? subscriptionData,
+      );
       return NextResponse.json(
-        { error: "Unable to create PayPal subscription.", details: subscriptionData },
+        {
+          error: paypalHint
+            ? `PayPal could not start the subscription: ${paypalHint}`
+            : "Unable to create PayPal subscription.",
+          details: subscriptionData,
+        },
         { status: 502 },
       );
     }

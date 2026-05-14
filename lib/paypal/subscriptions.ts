@@ -23,7 +23,9 @@ export function isPaypalPlanKey(value: string): value is PaypalPlanKey {
 
 export function getPaypalPlanId(plan: PaypalPlanKey): string | null {
   const envName = PAYPAL_PLAN_CONFIG[plan].envKey;
-  return process.env[envName] ?? null;
+  const raw = process.env[envName];
+  const trimmed = raw?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : null;
 }
 
 export function getPlanKeyFromPaypalPlanId(

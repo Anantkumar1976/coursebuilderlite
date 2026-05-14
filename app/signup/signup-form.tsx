@@ -25,6 +25,7 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
+  const [accountCreated, setAccountCreated] = useState(false);
   const [plan, setPlan] = useState<PaypalPlanKey>("starter");
   const invitePlanConfig =
     invite && Object.hasOwn(PAYPAL_PLAN_CONFIG, invite.plan_key)
@@ -89,7 +90,9 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (accountCreated) return;
     setError(null);
+    setInfo(null);
     if (!invite && (!paypalApproved || !subscriptionId)) {
       setError("Please approve your PayPal subscription before creating an account.");
       return;
@@ -182,6 +185,7 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
       router.refresh();
       return;
     }
+    setAccountCreated(true);
     setInfo(
       "Check your email to confirm your account, then sign in. (You can disable email confirmation in Supabase Auth settings for local development.)",
     );
@@ -210,6 +214,7 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
               id="plan"
               name="plan"
               value={plan}
+              disabled={accountCreated}
               onChange={(event) => {
                 setPlan(event.target.value as PaypalPlanKey);
                 setPaypalApproved(false);
@@ -227,7 +232,7 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
           </div>
           <button
             type="button"
-            disabled={paypalPending}
+            disabled={paypalPending || accountCreated}
             onClick={handlePaypalSubscribe}
             className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-300 bg-white px-4 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:hover:bg-zinc-900"
           >
@@ -258,7 +263,7 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
           type="email"
           autoComplete="email"
           required
-          readOnly={Boolean(invite)}
+          readOnly={Boolean(invite) || accountCreated}
           defaultValue={invite?.email_normalized ?? undefined}
           className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-zinc-400 placeholder:text-zinc-400 focus:ring-2 read-only:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:read-only:bg-zinc-900"
         />
@@ -277,6 +282,7 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
           autoComplete="new-password"
           required
           minLength={8}
+          readOnly={accountCreated}
           className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-zinc-400 placeholder:text-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
         />
       </div>
@@ -294,6 +300,7 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
           autoComplete="new-password"
           required
           minLength={8}
+          readOnly={accountCreated}
           className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-zinc-400 placeholder:text-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
         />
       </div>
@@ -309,10 +316,10 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
       ) : null}
       <button
         type="submit"
-        disabled={pending || (!invite && !paypalApproved)}
+        disabled={pending || accountCreated || (!invite && !paypalApproved)}
         className="inline-flex h-10 items-center justify-center rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
       >
-        {pending ? "Creating account…" : "Create account"}
+        {pending ? "Creating account…" : accountCreated ? "Account created" : "Create account"}
       </button>
       <p className="text-center text-sm text-zinc-600 dark:text-zinc-400">
         Already have an account?{" "}
