@@ -8,6 +8,7 @@ export function collectImageAssetIdsFromPages(
   const ids = new Set<string>();
   for (const p of pages) {
     const c = parsePageContent(p.content);
+    if (c.pageAudioAssetId) ids.add(c.pageAudioAssetId);
     if (c.template === "text_image") {
       if (c.imageAssetId) ids.add(c.imageAssetId);
       if (isColumnsLayout(c.layout) && c.blocks?.length) {
@@ -35,6 +36,25 @@ export function collectImageAssetIdsFromPages(
     if (c.template === "image_grid") {
       for (const item of c.items) {
         if (item.imageAssetId) ids.add(item.imageAssetId);
+      }
+    }
+    if (c.template === "click_reveal") {
+      for (const card of c.cards) {
+        if (card.cardImageAssetId) ids.add(card.cardImageAssetId);
+        if (card.revealImageAssetId) ids.add(card.revealImageAssetId);
+        if (card.revealAudioAssetId) ids.add(card.revealAudioAssetId);
+      }
+    }
+    if (
+      c.template === "mcq" ||
+      c.template === "mrq" ||
+      c.template === "true_false"
+    ) {
+      if (c.correctFeedbackAudioAssetId) {
+        ids.add(c.correctFeedbackAudioAssetId);
+      }
+      if (c.incorrectFeedbackAudioAssetId) {
+        ids.add(c.incorrectFeedbackAudioAssetId);
       }
     }
   }

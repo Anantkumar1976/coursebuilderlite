@@ -2,6 +2,8 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { ContactForm } from "@/components/marketing/contact-form";
+import { CustomLmsCta } from "@/components/marketing/custom-lms-cta";
+import { FeaturedDemos } from "@/components/marketing/featured-demos";
 import {
   CONTACT_EMAIL,
   HEADER_PRODUCT_LABEL,
@@ -131,47 +133,114 @@ export default function Home() {
       </header>
 
       <main className="flex-1">
-        <section id="get-started" className="mx-auto max-w-6xl px-4 pb-20 pt-14 sm:px-6 sm:pt-18">
-          <p className="text-sm font-medium text-teal-700">Empowering Digital Learning Growth</p>
-          <h1 id="hero-heading" className="mt-3 max-w-3xl text-4xl font-bold tracking-tight text-[#0f2745] sm:text-5xl">
+        <section id="get-started" className="mx-auto max-w-6xl px-4 pb-20 pt-16 sm:px-6 sm:pt-24">
+          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-teal-700">
+            Empowering Digital Learning Growth
+          </p>
+          <h1
+            id="hero-heading"
+            className="mt-5 max-w-4xl font-display text-5xl font-bold leading-[1.05] tracking-[-0.03em] text-[#0f2745] sm:text-6xl md:text-7xl"
+          >
             Accelerate course creation with modern templates, assessments, and export-ready delivery.
           </h1>
-          <p className="mt-5 max-w-2xl text-lg leading-relaxed text-slate-600">
+          <p className="mt-7 max-w-2xl text-xl leading-relaxed text-slate-600 sm:text-2xl">
             {PRODUCT_NAME} helps L&D teams, consultants, and content creators build structured learning
             experiences quickly — from authoring to branded learner delivery and SCORM packaging.
           </p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center">
             <Link
               href="/signup"
-              className="inline-flex h-11 items-center justify-center rounded-lg bg-[#0f2745] px-6 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#12335b]"
+              className="inline-flex h-12 items-center justify-center rounded-lg bg-[#0f2745] px-7 text-base font-semibold text-white shadow-sm transition-colors hover:bg-[#12335b]"
             >
               Get started
             </Link>
             <a
               href="#contact"
-              className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-300 bg-white px-6 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50"
+              className="inline-flex h-12 items-center justify-center rounded-lg border border-slate-300 bg-white px-7 text-base font-semibold text-slate-800 transition-colors hover:bg-slate-50"
             >
               Talk to sales
             </a>
           </div>
-          <div className="mt-10 grid gap-4 sm:grid-cols-2">
+          <div className="mt-12 grid gap-4 sm:grid-cols-2">
+            {/* eslint-disable-next-line @next/next/no-img-element -- remote Unsplash hero assets */}
             <img
               src="https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1200&q=80"
               alt="Team planning digital learning strategy"
-              className="h-56 w-full rounded-xl object-cover shadow-sm"
+              className="h-64 w-full rounded-xl object-cover shadow-sm sm:h-72"
             />
+            {/* eslint-disable-next-line @next/next/no-img-element -- remote Unsplash hero assets */}
             <img
               src="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80"
               alt="Product and content collaboration workspace"
-              className="h-56 w-full rounded-xl object-cover shadow-sm"
+              className="h-64 w-full rounded-xl object-cover shadow-sm sm:h-72"
             />
           </div>
         </section>
 
-        <section id="capabilities" className="border-t border-slate-200 bg-white py-16">
+        <section
+          id="positioning"
+          className="border-t border-slate-200 bg-white py-20"
+        >
+          <div className="mx-auto max-w-5xl px-4 text-center sm:px-6">
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-teal-700">
+              Why teams choose {PRODUCT_NAME}
+            </p>
+            <h2 className="mt-4 font-display text-3xl font-bold leading-[1.1] tracking-[-0.02em] text-[#0f2745] sm:text-4xl md:text-5xl">
+              Ship courses in days — not weeks. At a fraction of the cost.
+            </h2>
+            <p className="mx-auto mt-6 max-w-3xl text-lg leading-relaxed text-slate-600 sm:text-xl">
+              {PRODUCT_NAME} streamlines the authoring process so subject-matter
+              experts, trainers, and small L&amp;D teams can build learner-ready
+              content with{" "}
+              <span className="font-semibold text-[#0f2745]">
+                minimal authoring experience
+              </span>
+              . No plugin sprawl, no complex timelines, and{" "}
+              <span className="font-semibold text-[#0f2745]">
+                a fraction of the cost
+              </span>{" "}
+              of enterprise authoring tools.
+            </p>
+            <ul className="mx-auto mt-10 grid max-w-4xl gap-4 text-left sm:grid-cols-3">
+              <li className="rounded-xl border border-slate-200 bg-[#f8fbff] p-5">
+                <p className="text-base font-semibold text-[#0f2745]">
+                  Ready-to-use templates
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                  Text, media, columns, assessments, and results — pick a
+                  template, add content, publish.
+                </p>
+              </li>
+              <li className="rounded-xl border border-slate-200 bg-[#f8fbff] p-5">
+                <p className="text-base font-semibold text-[#0f2745]">
+                  No steep learning curve
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                  If you can write a document, you can author a course. Zero
+                  timeline scrubbing.
+                </p>
+              </li>
+              <li className="rounded-xl border border-slate-200 bg-[#f8fbff] p-5">
+                <p className="text-base font-semibold text-[#0f2745]">
+                  Predictable pricing
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                  Monthly plans starting at $29 — a fraction of what enterprise
+                  authoring suites charge per seat, per year.
+                </p>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <FeaturedDemos />
+
+        <section id="capabilities" className="border-t border-slate-200 bg-[#f6f9fc] py-20">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
-            <h2 className="text-2xl font-bold tracking-tight text-[#0f2745]">Platform capabilities</h2>
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
+            <h2 className="font-display text-3xl font-bold tracking-[-0.02em] text-[#0f2745] sm:text-4xl">
+              Platform capabilities
+            </h2>
+            <p className="mt-3 max-w-3xl text-lg leading-relaxed text-slate-600">
               Purpose-built for organizations that need practical course authoring with clean learner
               experiences, reliable exports, and predictable implementation speed.
             </p>
@@ -197,12 +266,12 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="comparison" className="border-t border-slate-200 bg-[#f3f8ff] py-16">
+        <section id="comparison" className="border-t border-slate-200 bg-[#f3f8ff] py-20">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
-            <h2 className="text-2xl font-bold tracking-tight text-[#0f2745]">
+            <h2 className="font-display text-3xl font-bold tracking-[-0.02em] text-[#0f2745] sm:text-4xl">
               How we compare with open-source authoring stacks
             </h2>
-            <p className="mt-2 max-w-3xl text-sm text-slate-600">
+            <p className="mt-3 max-w-3xl text-lg leading-relaxed text-slate-600">
               We focus on speed to launch, cleaner experiences, and practical controls. It is a strong fit
               for teams that value simplicity over plugin-heavy complexity.
             </p>
@@ -217,10 +286,12 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="pricing" className="border-t border-slate-200 bg-white py-16">
+        <section id="pricing" className="border-t border-slate-200 bg-white py-20">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
-            <h2 className="text-2xl font-bold tracking-tight text-[#0f2745]">Subscription model</h2>
-            <p className="mt-2 max-w-3xl text-sm text-slate-600">
+            <h2 className="font-display text-3xl font-bold tracking-[-0.02em] text-[#0f2745] sm:text-4xl">
+              Subscription model
+            </h2>
+            <p className="mt-3 max-w-3xl text-lg leading-relaxed text-slate-600">
               Built on a seat + capability model so teams can start lean and scale with governance and support.
             </p>
             <div className="mt-8 grid gap-5 lg:grid-cols-2">
@@ -246,17 +317,74 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="contact" className="border-t border-slate-200 bg-[#eaf3fb] py-16">
+        <section
+          id="custom-lms"
+          className="border-t border-slate-200 bg-gradient-to-br from-[#0f2745] via-[#12335b] to-[#0f2745] py-20 text-white"
+        >
+          <div className="mx-auto grid max-w-6xl gap-10 px-4 sm:px-6 lg:grid-cols-[1.15fr_1fr] lg:items-center">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.14em] text-teal-300">
+                Custom LMS solutions
+              </p>
+              <h2 className="mt-4 font-display text-3xl font-bold leading-[1.1] tracking-[-0.02em] sm:text-4xl md:text-5xl">
+                Need a hosted LMS to deliver your courses?
+              </h2>
+              <p className="mt-5 max-w-2xl text-lg leading-relaxed text-slate-200">
+                Get a tailored learning platform to quickly deploy the courses
+                you&apos;ve authored in {PRODUCT_NAME} — with branded portals,
+                learner accounts, cohorts, progress tracking, and completion
+                reporting hosted on your domain. Ideal for training providers,
+                enterprises, and consultants who want an end-to-end authoring
+                and delivery workflow.
+              </p>
+              <ul className="mt-6 grid gap-2 text-sm text-slate-200 sm:grid-cols-2">
+                <li className="flex items-start gap-2">
+                  <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-300" aria-hidden />
+                  Branded learner portal on your domain
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-300" aria-hidden />
+                  Learner accounts, cohorts, enrolments
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-300" aria-hidden />
+                  Progress tracking &amp; completion reports
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-300" aria-hidden />
+                  Deploy SCORM 1.2, SCORM 2004, or standalone HTML packages
+                </li>
+              </ul>
+            </div>
+            <div className="rounded-2xl border border-white/15 bg-white/5 p-6 backdrop-blur-sm sm:p-8">
+              <p className="font-display text-2xl font-semibold sm:text-3xl">
+                Let&apos;s scope your custom LMS.
+              </p>
+              <p className="mt-3 text-sm leading-relaxed text-slate-200">
+                Tell us about your learners, your delivery goals, and your
+                timeline. We&apos;ll get back with a fit assessment and pricing.
+              </p>
+              <CustomLmsCta />
+              <p className="mt-3 text-xs text-slate-300">
+                Opens the contact form below with the enquiry type prefilled.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section id="contact" className="border-t border-slate-200 bg-[#eaf3fb] py-20">
           <div className="mx-auto grid max-w-6xl gap-8 px-4 sm:px-6 lg:grid-cols-[1fr_1.15fr]">
             <div>
-              <p className="text-sm font-medium uppercase tracking-wide text-teal-700">Contact us</p>
-              <h2 className="mt-2 text-3xl font-bold tracking-tight text-[#0f2745]">
+              <p className="text-sm font-semibold uppercase tracking-[0.14em] text-teal-700">
+                Contact us
+              </p>
+              <h2 className="mt-4 font-display text-3xl font-bold leading-[1.1] tracking-[-0.02em] text-[#0f2745] sm:text-4xl md:text-5xl">
                 Let&apos;s discuss your use case
               </h2>
-              <p className="mt-3 text-sm leading-relaxed text-slate-600">
+              <p className="mt-4 text-lg leading-relaxed text-slate-600">
                 Share your requirements and our team will respond with a suitable plan. We handle sales
-                enquiries, licensing questions, feature requests, bug reports, and general product queries.
-                You can also email{" "}
+                enquiries, custom LMS scoping, licensing questions, feature requests, bug reports, and
+                general product queries. You can also email{" "}
                 <a
                   className="font-medium text-[#0f2745] underline decoration-[#FF8C55] underline-offset-2 hover:text-[#12335b]"
                   href={`mailto:${CONTACT_EMAIL}`}
@@ -265,6 +393,7 @@ export default function Home() {
                 </a>
                 .
               </p>
+              {/* eslint-disable-next-line @next/next/no-img-element -- remote Unsplash hero assets */}
               <img
                 src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1200&q=80"
                 alt="Discussion around product planning"

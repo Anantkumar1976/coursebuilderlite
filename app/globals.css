@@ -8,7 +8,11 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  /* Body / UI: Inter (Graphik-alike). Display / headings: Plus Jakarta Sans (GT Walsheim-alike). */
+  --font-sans: var(--font-sans-body), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--font-sans-display), var(--font-sans-body),
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: var(--font-geist-mono);
 }
 
@@ -23,3 +27,38 @@ body {
   background: var(--background);
   color: var(--foreground);
 }
+
+/* TipTap editor: restore list markers that Tailwind Preflight strips */
+.cb-rte .ProseMirror ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin: 0.5rem 0 0.75rem;
+}
+.cb-rte .ProseMirror ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin: 0.5rem 0 0.75rem;
+}
+.cb-rte .ProseMirror li {
+  margin: 0.15rem 0;
+}
+.cb-rte .ProseMirror li p {
+  margin: 0;
+}
+.cb-rte .ProseMirror p {
+  margin: 0 0 0.5rem;
+}
+.cb-rte .ProseMirror p:last-child {
+  margin-bottom: 0;
+}
+.cb-rte .ProseMirror h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0.75rem 0 0.35rem;
+}
+.cb-rte .ProseMirror h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0.6rem 0 0.3rem;
+}
+

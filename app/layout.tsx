@@ -1,10 +1,19 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Body / UI font — modern neo-grotesque, in the spirit of Graphik.
+const interSans = Inter({
+  variable: "--font-sans-body",
   subsets: ["latin"],
+  display: "swap",
+});
+
+// Display / headings font — warm rounded geometric, in the spirit of GT Walsheim.
+const jakartaDisplay = Plus_Jakarta_Sans({
+  variable: "--font-sans-display",
+  subsets: ["latin"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
@@ -26,7 +35,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${interSans.variable} ${jakartaDisplay.variable} ${geistMono.variable} h-full antialiased`}
     >
       {/* suppressHydrationWarning: extensions (e.g. ColorZilla) may inject attrs on <body> */}
       <body

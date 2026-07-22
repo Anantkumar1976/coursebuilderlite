@@ -1,4 +1,9 @@
 import {
+  emptyClickRevealItem,
+  normalizeClickRevealItems,
+} from "./click-reveal";
+import { emptyQuestionFeedbackFields } from "./question-feedback";
+import {
   DEFAULT_TEXT_IMAGE_LAYOUT,
   normalizeTextImageContent,
 } from "./text-image";
@@ -11,7 +16,6 @@ import {
   DEFAULT_IMAGE_GRID_LAYOUT,
   DEFAULT_IMAGE_GRID_ROW_MODE,
   emptyImageGridItem,
-  IMAGE_GRID_CAPTION_MODE_LABELS,
   IMAGE_GRID_LAYOUT_LABELS,
   IMAGE_GRID_ROW_MODE_LABELS,
   imageGridCellCount,
@@ -48,6 +52,7 @@ export const TEMPLATE_LABELS: Record<TemplateId, string> = {
   image_grid: "Image grid",
   tabs: "Tabs",
   accordion: "Accordion",
+  click_reveal: "Click and reveal",
   course_completion: "Course completion/certificate",
   mcq: "MCQ",
   mrq: "MRQ",
@@ -79,6 +84,7 @@ export const ADD_PAGE_TEMPLATE_OPTIONS: { value: string; label: string }[] = [
   { value: "image_grid", label: TEMPLATE_LABELS.image_grid },
   { value: "tabs", label: TEMPLATE_LABELS.tabs },
   { value: "accordion", label: TEMPLATE_LABELS.accordion },
+  { value: "click_reveal", label: TEMPLATE_LABELS.click_reveal },
   { value: "course_completion", label: TEMPLATE_LABELS.course_completion },
   { value: "mcq", label: TEMPLATE_LABELS.mcq },
   { value: "mrq", label: TEMPLATE_LABELS.mrq },
@@ -239,6 +245,18 @@ export function defaultPageContent(
         template: "accordion",
         items: [{ id: newId(), title: "Section 1", body: "" }],
       };
+    case "click_reveal":
+      return {
+        v: 1,
+        template: "click_reveal",
+        intro: "",
+        cards: normalizeClickRevealItems([
+          emptyClickRevealItem(0),
+          emptyClickRevealItem(1),
+          emptyClickRevealItem(2),
+          emptyClickRevealItem(3),
+        ]),
+      };
     case "course_completion":
       return {
         v: 1,
@@ -256,6 +274,7 @@ export function defaultPageContent(
         question: "",
         options: ["", "", "", ""],
         correctIndex: 0,
+        ...emptyQuestionFeedbackFields(),
       };
     case "mrq":
       return {
@@ -264,6 +283,7 @@ export function defaultPageContent(
         question: "",
         options: ["", ""],
         correctIndices: [],
+        ...emptyQuestionFeedbackFields(),
       };
     case "true_false":
       return {
@@ -271,6 +291,7 @@ export function defaultPageContent(
         template: "true_false",
         question: "",
         correct: true,
+        ...emptyQuestionFeedbackFields(),
       };
     case "final_quiz":
       return {

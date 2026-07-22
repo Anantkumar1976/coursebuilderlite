@@ -3,6 +3,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
 } from "react";
@@ -32,7 +33,9 @@ import {
   TEMPLATE_LABELS,
   normalizeImageCarouselItems,
   normalizeImageGridItems,
+  resolveQuestionFeedbackAudioSrc,
   type PageContentV1,
+  type QuestionFeedbackFields,
 } from "@/lib/page-builder";
 import {
   blockCountForLayout,
@@ -46,7 +49,15 @@ import {
 
 import type { ThemeColors } from "@/lib/course-theme/theme";
 
-function RichBodyHtml({ html }: { html: string }) {
+import { ClickRevealBlock } from "./click-reveal-block";
+
+function RichBodyHtml({
+  html,
+  className = "",
+}: {
+  html: string;
+  className?: string;
+}) {
   const safe = useMemo(() => sanitizeBodyHtml(html), [html]);
   if (!html.trim() || isEffectivelyEmptyHtml(html)) {
     return (
@@ -55,10 +66,73 @@ function RichBodyHtml({ html }: { html: string }) {
   }
   return (
     <div
-      className="cb-rich max-w-none text-inherit leading-relaxed text-zinc-800 [&_a]:text-blue-600 [&_a]:underline [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:mt-3 [&_h3]:text-lg [&_h3]:font-semibold [&_ol]:mb-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:mb-3 [&_ul]:list-disc [&_ul]:pl-6"
+      className={`cb-rich max-w-none text-inherit leading-relaxed text-zinc-800 [&_a]:text-blue-600 [&_a]:underline [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:mt-3 [&_h3]:text-lg [&_h3]:font-semibold [&_ol]:mb-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:mb-3 [&_ul]:list-disc [&_ul]:pl-6 ${className}`}
       dangerouslySetInnerHTML={{ __html: safe }}
     />
   );
+}
+
+function QuestionFeedbackDisplay({
+  isCorrect,
+  content,
+  signedAssetUrls,
+}: {
+  isCorrect: boolean;
+  content: QuestionFeedbackFields;
+  signedAssetUrls?: Record<string, string>;
+}) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const text = isCorrect
+    ? content.correctFeedback
+    : content.incorrectFeedback;
+  const assetId = isCorrect
+    ? content.correctFeedbackAudioAssetId
+    : content.incorrectFeedbackAudioAssetId;
+  const src = resolveQuestionFeedbackAudioSrc(assetId, signedAssetUrls);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!src || !audio) return;
+    audio.src = src;
+    audio.currentTime = 0;
+    void audio.play().catch(() => {
+      // Autoplay may be blocked until the learner interacts with the page.
+    });
+    return () => {
+      audio.pause();
+      audio.currentTime = 0;
+    };
+  }, [src, isCorrect]);
+
+  if (!text?.trim() && !src) return null;
+
+  const toneClass = isCorrect
+    ? "border-emerald-500 bg-emerald-50 text-emerald-950 dark:border-emerald-500 dark:bg-emerald-950/60 dark:text-emerald-50"
+    : "border-red-400 bg-red-50 text-red-950 dark:border-red-500 dark:bg-red-950/60 dark:text-red-50";
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={`mt-1 min-h-[3.75rem] rounded-lg border-2 px-5 py-4 text-sm leading-relaxed ${toneClass}`}
+    >
+      {src ? (
+        <audio
+          ref={audioRef}
+          preload="auto"
+          className="sr-only"
+          aria-label={isCorrect ? "Correct answer feedback" : "Incorrect answer feedback"}
+        />
+      ) : null}
+      {text?.trim() ? (
+        <RichBodyHtml html={text} className="!text-inherit [&_p]:!text-inherit" />
+      ) : null}
+    </div>
+  );
+}
+
+function assessSubmitButtonClass() {
+  return "rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900";
 }
 
 function TextImageFigure({
@@ -197,6 +271,7 @@ export function TemplateRenderer({
   lessonAssessmentPageIds,
   isLastLessonInCourse,
   assessmentAttemptsLimit,
+  knowledgeCheckFeedback,
   courseTitle,
   learnerName,
   courseComplete,
@@ -215,6 +290,8 @@ export function TemplateRenderer({
   lessonAssessmentPageIds?: string[];
   /** When true, a completed lesson quiz also writes the LMS export score. */
   isLastLessonInCourse?: boolean;
+  /** When true, show author feedback after submit (in-lesson knowledge checks). */
+  knowledgeCheckFeedback?: boolean;
   /** Max submitted final-assessment scores; null = unlimited. */
   assessmentAttemptsLimit?: number | null;
   courseTitle?: string;
@@ -229,12 +306,15 @@ export function TemplateRenderer({
   const passPct = passingScorePercent ?? 70;
   const assessIds = lessonAssessmentPageIds ?? [];
   const lastLesson = isLastLessonInCourse ?? false;
+  const kcFeedback = knowledgeCheckFeedback ?? false;
   const assessmentLimit = assessmentAttemptsLimit ?? null;
   const isComplete = courseComplete ?? false;
   const hasAssessment = hasFinalAssessment ?? false;
   const [assessVersion, setAssessVersion] = useState(0);
   const finalSnapshot = useMemo(
     () => (courseId ? readFinalQuizResult(courseId) : null),
+    // assessVersion intentionally triggers re-read after assessment events
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- version bump is the refresh signal
     [courseId, assessVersion],
   );
 
@@ -254,6 +334,7 @@ export function TemplateRenderer({
     if (!courseId || !lastLesson) return false;
     if (isFinalAssessmentLocked(courseId, assessmentLimit)) return true;
     return readFinalQuizResult(courseId) !== null;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- assessVersion bump refreshes local storage reads
   }, [courseId, lastLesson, assessmentLimit, assessVersion]);
 
   const label = TEMPLATE_LABELS[content.template];
@@ -320,6 +401,14 @@ export function TemplateRenderer({
         />
       ) : null}
 
+      {content.template === "click_reveal" ? (
+        <ClickRevealBlock
+          content={content}
+          signedImageUrls={signedImageUrls}
+          highlightColor={themeColors?.highlight}
+        />
+      ) : null}
+
       {content.template === "course_completion" ? (
         <CourseCompletionBlock
           content={content}
@@ -342,6 +431,8 @@ export function TemplateRenderer({
           courseId={courseId}
           pageId={pageId}
           interactionDisabled={lessonAssessmentEditsLocked}
+          knowledgeCheckFeedback={kcFeedback}
+          signedAssetUrls={signedImageUrls}
         />
       ) : null}
 
@@ -351,6 +442,8 @@ export function TemplateRenderer({
           courseId={courseId}
           pageId={pageId}
           interactionDisabled={lessonAssessmentEditsLocked}
+          knowledgeCheckFeedback={kcFeedback}
+          signedAssetUrls={signedImageUrls}
         />
       ) : null}
 
@@ -360,6 +453,8 @@ export function TemplateRenderer({
           courseId={courseId}
           pageId={pageId}
           interactionDisabled={lessonAssessmentEditsLocked}
+          knowledgeCheckFeedback={kcFeedback}
+          signedAssetUrls={signedImageUrls}
         />
       ) : null}
 
@@ -566,23 +661,21 @@ function ImageCarouselBlock({
     resolveTextImageSrc(item.imageAssetId, item.imageUrl, signedImageUrls),
   );
   const [active, setActive] = useState(0);
-
-  useEffect(() => {
-    if (active >= items.length) setActive(Math.max(0, items.length - 1));
-  }, [active, items.length]);
+  const clampedActive =
+    items.length === 0 ? 0 : Math.min(active, Math.max(0, items.length - 1));
 
   if (items.length === 0) {
     return <p className="text-sm text-zinc-500">No carousel images set.</p>;
   }
 
-  const current = items[active];
+  const current = items[clampedActive];
   const src = resolveTextImageSrc(
     current.imageAssetId,
     current.imageUrl,
     signedImageUrls,
   );
-  const canPrev = active > 0;
-  const canNext = active < items.length - 1;
+  const canPrev = clampedActive > 0;
+  const canNext = clampedActive < items.length - 1;
 
   return (
     <div className="space-y-3">
@@ -597,14 +690,14 @@ function ImageCarouselBlock({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={src}
-              alt={current.imageAlt || current.title || `Slide ${active + 1}`}
+              alt={current.imageAlt || current.title || `Slide ${clampedActive + 1}`}
               className="aspect-[16/9] w-full object-cover"
               loading="lazy"
             />
             {content.captionMode === "overlay" ? (
               <div className="absolute inset-x-0 bottom-0 bg-black/60 px-4 py-3 text-white">
                 <p className="text-sm font-semibold">
-                  {current.title || `Slide ${active + 1}`}
+                  {current.title || `Slide ${clampedActive + 1}`}
                 </p>
                 {current.caption ? (
                   <p className="mt-1 text-xs text-white/90">{current.caption}</p>
@@ -1027,18 +1120,23 @@ function McqBlock({
   courseId,
   pageId,
   interactionDisabled,
+  knowledgeCheckFeedback,
+  signedAssetUrls,
 }: {
   content: Extract<PageContentV1, { template: "mcq" }>;
   courseId?: string;
   pageId?: string;
   interactionDisabled?: boolean;
+  knowledgeCheckFeedback?: boolean;
+  signedAssetUrls?: Record<string, string>;
 }) {
+  const kc = !!knowledgeCheckFeedback;
   const [picked, setPicked] = useState<number | null>(() => {
     if (typeof window === "undefined" || !courseId || !pageId) return null;
     const s = readPageAssessment(courseId, pageId);
     return typeof s?.mcqPick === "number" ? s.mcqPick : null;
   });
-  const [show, setShow] = useState(() => {
+  const [submitted, setSubmitted] = useState(() => {
     if (typeof window === "undefined" || !courseId || !pageId) return false;
     return readPageAssessment(courseId, pageId) !== null;
   });
@@ -1050,7 +1148,7 @@ function McqBlock({
     function sync() {
       const s = readPageAssessment(cid, pid);
       setPicked(typeof s?.mcqPick === "number" ? s.mcqPick : null);
-      setShow(s !== null);
+      setSubmitted(s !== null);
     }
     sync();
     window.addEventListener("cbl-lesson-assess-updated", sync);
@@ -1059,6 +1157,33 @@ function McqBlock({
   }, [courseId, pageId]);
 
   const frozen = !!interactionDisabled;
+  const showResults = submitted;
+  const isCorrect = picked === content.correctIndex;
+
+  function handlePick(idx: number) {
+    if (frozen || (kc && submitted)) return;
+    setPicked(idx);
+    if (!kc) {
+      setSubmitted(true);
+      if (courseId && pageId) {
+        writePageAssessment(courseId, pageId, {
+          correct: idx === content.correctIndex,
+          mcqPick: idx,
+        });
+      }
+    }
+  }
+
+  function handleSubmit() {
+    if (frozen || !kc || submitted || picked === null) return;
+    setSubmitted(true);
+    if (courseId && pageId) {
+      writePageAssessment(courseId, pageId, {
+        correct: picked === content.correctIndex,
+        mcqPick: picked,
+      });
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -1067,34 +1192,27 @@ function McqBlock({
       </p>
       <ul className="space-y-2">
         {content.options.map((opt, idx) => {
-          const isCorrect = idx === content.correctIndex;
+          const isCorrectOption = idx === content.correctIndex;
           const isPicked = picked === idx;
           let itemClass =
             "border-zinc-200 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-500";
-          if (show && isPicked) {
-            itemClass = isCorrect
+          if (showResults && isPicked) {
+            itemClass = isCorrectOption
               ? "border-emerald-500 bg-emerald-50 dark:border-emerald-600 dark:bg-emerald-950/40"
               : "border-red-400 bg-red-50 dark:border-red-700 dark:bg-red-950/40";
-          } else if (show && isCorrect) {
+          } else if (showResults && isCorrectOption) {
             itemClass =
               "border-emerald-500 bg-emerald-50 dark:border-emerald-600 dark:bg-emerald-950/40";
+          } else if (kc && isPicked && !submitted) {
+            itemClass =
+              "border-zinc-900 bg-zinc-100 dark:border-zinc-400 dark:bg-zinc-800";
           }
           return (
             <li key={idx}>
               <button
                 type="button"
                 disabled={frozen}
-                onClick={() => {
-                  if (frozen) return;
-                  setPicked(idx);
-                  setShow(true);
-                  if (courseId && pageId) {
-                    writePageAssessment(courseId, pageId, {
-                      correct: idx === content.correctIndex,
-                      mcqPick: idx,
-                    });
-                  }
-                }}
+                onClick={() => handlePick(idx)}
                 className={`w-full rounded-lg border px-4 py-3 text-left text-sm transition-colors ${itemClass} disabled:cursor-not-allowed disabled:opacity-50`}
               >
                 {opt || `Option ${idx + 1}`}
@@ -1103,12 +1221,28 @@ function McqBlock({
           );
         })}
       </ul>
-      {show && picked !== null ? (
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          {picked === content.correctIndex
-            ? "Correct."
-            : "Incorrect."}
-        </p>
+      {kc && !submitted ? (
+        <button
+          type="button"
+          disabled={frozen || picked === null}
+          onClick={handleSubmit}
+          className={assessSubmitButtonClass()}
+        >
+          Submit
+        </button>
+      ) : null}
+      {showResults && picked !== null ? (
+        kc ? (
+          <QuestionFeedbackDisplay
+            isCorrect={isCorrect}
+            content={content}
+            signedAssetUrls={signedAssetUrls}
+          />
+        ) : (
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            {isCorrect ? "Correct." : "Incorrect."}
+          </p>
+        )
       ) : null}
     </div>
   );
@@ -1119,12 +1253,17 @@ function MrqBlock({
   courseId,
   pageId,
   interactionDisabled,
+  knowledgeCheckFeedback,
+  signedAssetUrls,
 }: {
   content: Extract<PageContentV1, { template: "mrq" }>;
   courseId?: string;
   pageId?: string;
   interactionDisabled?: boolean;
+  knowledgeCheckFeedback?: boolean;
+  signedAssetUrls?: Record<string, string>;
 }) {
+  const kc = !!knowledgeCheckFeedback;
   const [selected, setSelected] = useState<Set<number>>(() => {
     if (typeof window === "undefined" || !courseId || !pageId) {
       return new Set();
@@ -1133,7 +1272,7 @@ function MrqBlock({
     if (s && Array.isArray(s.mrqSelected)) return new Set(s.mrqSelected);
     return new Set();
   });
-  const [show, setShow] = useState(() => {
+  const [submitted, setSubmitted] = useState(() => {
     if (typeof window === "undefined" || !courseId || !pageId) return false;
     return readPageAssessment(courseId, pageId) !== null;
   });
@@ -1146,10 +1285,10 @@ function MrqBlock({
       const s = readPageAssessment(cid, pid);
       if (s && Array.isArray(s.mrqSelected)) {
         setSelected(new Set(s.mrqSelected));
-        setShow(true);
+        setSubmitted(true);
       } else {
         setSelected(new Set());
-        setShow(false);
+        setSubmitted(false);
       }
     }
     sync();
@@ -1166,19 +1305,18 @@ function MrqBlock({
   const frozen = !!interactionDisabled;
 
   function toggle(i: number) {
-    if (frozen) return;
+    if (frozen || submitted) return;
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(i)) next.delete(i);
       else next.add(i);
       return next;
     });
-    setShow(false);
   }
 
   function check() {
-    if (frozen) return;
-    setShow(true);
+    if (frozen || submitted) return;
+    setSubmitted(true);
     const isMatch =
       correctSet.size === selected.size &&
       [...correctSet].every((i) => selected.has(i));
@@ -1205,7 +1343,7 @@ function MrqBlock({
           const should = correctSet.has(idx);
           let itemClass =
             "border-zinc-200 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-500";
-          if (show) {
+          if (submitted) {
             if (should && on) {
               itemClass =
                 "border-emerald-500 bg-emerald-50 dark:border-emerald-600 dark:bg-emerald-950/40";
@@ -1225,9 +1363,7 @@ function MrqBlock({
               <button
                 type="button"
                 disabled={frozen}
-                onClick={() => {
-                  toggle(idx);
-                }}
+                onClick={() => toggle(idx)}
                 className={`w-full rounded-lg border px-4 py-3 text-left text-sm transition-colors ${itemClass} disabled:cursor-not-allowed disabled:opacity-50`}
               >
                 {opt || `Option ${idx + 1}`}
@@ -1236,18 +1372,30 @@ function MrqBlock({
           );
         })}
       </ul>
-      <button
-        type="button"
-        disabled={frozen}
-        onClick={check}
-        className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-      >
-        Check answer
-      </button>
-      {show ? (
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          {isMatch ? "Correct — all right choices selected." : "Not quite — review the highlighted options."}
-        </p>
+      {!submitted ? (
+        <button
+          type="button"
+          disabled={frozen || selected.size === 0}
+          onClick={check}
+          className={assessSubmitButtonClass()}
+        >
+          Submit
+        </button>
+      ) : null}
+      {submitted ? (
+        kc ? (
+          <QuestionFeedbackDisplay
+            isCorrect={isMatch}
+            content={content}
+            signedAssetUrls={signedAssetUrls}
+          />
+        ) : (
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            {isMatch
+              ? "Correct — all right choices selected."
+              : "Not quite — review the highlighted options."}
+          </p>
+        )
       ) : null}
     </div>
   );
@@ -1258,16 +1406,25 @@ function TrueFalseBlock({
   courseId,
   pageId,
   interactionDisabled,
+  knowledgeCheckFeedback,
+  signedAssetUrls,
 }: {
   content: Extract<PageContentV1, { template: "true_false" }>;
   courseId?: string;
   pageId?: string;
   interactionDisabled?: boolean;
+  knowledgeCheckFeedback?: boolean;
+  signedAssetUrls?: Record<string, string>;
 }) {
+  const kc = !!knowledgeCheckFeedback;
   const [picked, setPicked] = useState<boolean | null>(() => {
     if (typeof window === "undefined" || !courseId || !pageId) return null;
     const s = readPageAssessment(courseId, pageId);
     return typeof s?.tfPick === "boolean" ? s.tfPick : null;
+  });
+  const [submitted, setSubmitted] = useState(() => {
+    if (typeof window === "undefined" || !courseId || !pageId) return false;
+    return readPageAssessment(courseId, pageId) !== null;
   });
 
   useEffect(() => {
@@ -1277,6 +1434,7 @@ function TrueFalseBlock({
     function sync() {
       const s = readPageAssessment(cid, pid);
       setPicked(typeof s?.tfPick === "boolean" ? s.tfPick : null);
+      setSubmitted(s !== null);
     }
     sync();
     window.addEventListener("cbl-lesson-assess-updated", sync);
@@ -1285,6 +1443,32 @@ function TrueFalseBlock({
   }, [courseId, pageId]);
 
   const frozen = !!interactionDisabled;
+  const isCorrect = picked === content.correct;
+
+  function handlePick(val: boolean) {
+    if (frozen || (kc && submitted)) return;
+    setPicked(val);
+    if (!kc) {
+      setSubmitted(true);
+      if (courseId && pageId) {
+        writePageAssessment(courseId, pageId, {
+          correct: val === content.correct,
+          tfPick: val,
+        });
+      }
+    }
+  }
+
+  function handleSubmit() {
+    if (frozen || !kc || submitted || picked === null) return;
+    setSubmitted(true);
+    if (courseId && pageId) {
+      writePageAssessment(courseId, pageId, {
+        correct: picked === content.correct,
+        tfPick: picked,
+      });
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -1292,37 +1476,54 @@ function TrueFalseBlock({
         {content.question || "Statement"}
       </p>
       <div className="flex flex-wrap gap-3">
-        {([true, false] as const).map((val) => (
-          <button
-            key={String(val)}
-            type="button"
-            disabled={frozen}
-            onClick={() => {
-              if (frozen) return;
-              setPicked(val);
-              if (courseId && pageId) {
-                writePageAssessment(courseId, pageId, {
-                  correct: val === content.correct,
-                  tfPick: val,
-                });
-              }
-            }}
-            className={`rounded-lg border px-6 py-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-              picked === val
-                ? val === content.correct
-                  ? "border-emerald-500 bg-emerald-50 text-emerald-900 dark:border-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-100"
-                  : "border-red-400 bg-red-50 text-red-900 dark:border-red-700 dark:bg-red-950/40 dark:text-red-100"
-                : "border-zinc-200 bg-white hover:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-zinc-500"
-            }`}
-          >
-            {val ? "True" : "False"}
-          </button>
-        ))}
+        {([true, false] as const).map((val) => {
+          const isPicked = picked === val;
+          let btnClass =
+            "border-zinc-200 bg-white hover:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-zinc-500";
+          if (submitted && isPicked) {
+            btnClass =
+              val === content.correct
+                ? "border-emerald-500 bg-emerald-50 text-emerald-900 dark:border-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-100"
+                : "border-red-400 bg-red-50 text-red-900 dark:border-red-700 dark:bg-red-950/40 dark:text-red-100";
+          } else if (kc && isPicked && !submitted) {
+            btnClass =
+              "border-zinc-900 bg-zinc-100 dark:border-zinc-400 dark:bg-zinc-800";
+          }
+          return (
+            <button
+              key={String(val)}
+              type="button"
+              disabled={frozen}
+              onClick={() => handlePick(val)}
+              className={`rounded-lg border px-6 py-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${btnClass}`}
+            >
+              {val ? "True" : "False"}
+            </button>
+          );
+        })}
       </div>
-      {picked !== null ? (
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          {picked === content.correct ? "Correct." : "Incorrect."}
-        </p>
+      {kc && !submitted ? (
+        <button
+          type="button"
+          disabled={frozen || picked === null}
+          onClick={handleSubmit}
+          className={assessSubmitButtonClass()}
+        >
+          Submit
+        </button>
+      ) : null}
+      {submitted && picked !== null ? (
+        kc ? (
+          <QuestionFeedbackDisplay
+            isCorrect={isCorrect}
+            content={content}
+            signedAssetUrls={signedAssetUrls}
+          />
+        ) : (
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            {isCorrect ? "Correct." : "Incorrect."}
+          </p>
+        )
       ) : null}
     </div>
   );
@@ -1418,6 +1619,7 @@ function QuizResultsBlock({
     const allAnswered = total > 0 && answered === total;
     const passed = scorePercent >= passingScorePercent;
     return { total, answered, correct, scorePercent, allAnswered, passed };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- tick bump refreshes lesson assessment reads
   }, [courseId, lessonAssessmentPageIds, tick, passingScorePercent]);
 
   useEffect(() => {
@@ -1448,6 +1650,7 @@ function QuizResultsBlock({
     summary.scorePercent,
     summary.total,
     assessIdsKey,
+    lessonAssessmentPageIds,
   ]);
 
   function handleRetake() {

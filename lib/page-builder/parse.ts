@@ -1,6 +1,12 @@
 import type { Json } from "@/lib/supabase/database.types";
 
+import {
+  emptyClickRevealItem,
+  normalizeClickRevealItems,
+} from "./click-reveal";
 import { defaultPageContent } from "./defaults";
+import { attachPageAudio } from "./page-audio";
+import { attachQuestionFeedback } from "./question-feedback";
 import {
   normalizeTextImageContent,
   parseTextImageLayout,
@@ -20,6 +26,7 @@ import {
 } from "./image-carousel";
 import type {
   AccordionItem,
+  ClickRevealItem,
   ImageCarouselCaptionMode,
   ImageCarouselItem,
   ImageGridCaptionMode,
@@ -153,6 +160,57 @@ function parseAccordionItems(raw: unknown): AccordionItem[] {
     : [{ id: randomId(), title: "Section 1", body: "" }];
 }
 
+function parseClickRevealItems(raw: unknown): ClickRevealItem[] {
+  if (!Array.isArray(raw)) return normalizeClickRevealItems(undefined);
+  const out: ClickRevealItem[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+    const r = row as Record<string, unknown>;
+    out.push({
+      id: typeof r.id === "string" ? r.id : randomId(),
+      cardTitle: typeof r.cardTitle === "string" ? r.cardTitle : "",
+      cardBody: typeof r.cardBody === "string" ? r.cardBody : "",
+      cardImageAssetId:
+        typeof r.cardImageAssetId === "string" && r.cardImageAssetId.length > 0
+          ? r.cardImageAssetId
+          : typeof r.imageAssetId === "string" && r.imageAssetId.length > 0
+            ? r.imageAssetId
+            : null,
+      cardImageUrl:
+        typeof r.cardImageUrl === "string"
+          ? r.cardImageUrl
+          : typeof r.imageUrl === "string"
+            ? r.imageUrl
+            : "",
+      cardImageAlt:
+        typeof r.cardImageAlt === "string"
+          ? r.cardImageAlt
+          : typeof r.imageAlt === "string"
+            ? r.imageAlt
+            : "",
+      revealTitle: typeof r.revealTitle === "string" ? r.revealTitle : "",
+      revealBody: typeof r.revealBody === "string" ? r.revealBody : "",
+      revealImageAssetId:
+        typeof r.revealImageAssetId === "string" &&
+        r.revealImageAssetId.length > 0
+          ? r.revealImageAssetId
+          : null,
+      revealImageUrl:
+        typeof r.revealImageUrl === "string" ? r.revealImageUrl : "",
+      revealImageAlt:
+        typeof r.revealImageAlt === "string" ? r.revealImageAlt : "",
+      revealAudioAssetId:
+        typeof r.revealAudioAssetId === "string" &&
+        r.revealAudioAssetId.length > 0
+          ? r.revealAudioAssetId
+          : null,
+    });
+  }
+  return normalizeClickRevealItems(
+    out.length ? out : [emptyClickRevealItem(0)],
+  );
+}
+
 function parseImageGridLayout(raw: unknown): ImageGridLayout {
   if (typeof raw !== "string") return DEFAULT_IMAGE_GRID_LAYOUT;
   return (IMAGE_GRID_LAYOUTS as readonly string[]).includes(raw)
@@ -230,11 +288,14 @@ export function parsePageContent(raw: Json | undefined): PageContentV1 {
   const t = o.template as TemplateId;
   switch (t) {
     case "text":
-      return {
-        v: 1,
-        template: "text",
-        body: typeof o.body === "string" ? o.body : "",
-      };
+      return attachPageAudio(
+        {
+          v: 1,
+          template: "text",
+          body: typeof o.body === "string" ? o.body : "",
+        },
+        o,
+      );
     case "text_image": {
       const layout = parseTextImageLayout(o.layout);
       const blocks = parseTextImageBlocks(o.blocks);
@@ -251,84 +312,118 @@ export function parsePageContent(raw: Json | undefined): PageContentV1 {
         imageAlt: typeof o.imageAlt === "string" ? o.imageAlt : "",
         blocks,
       };
-      return normalizeTextImageContent(base);
+      return attachPageAudio(normalizeTextImageContent(base), o);
     }
     case "text_video":
-      return {
-        v: 1,
-        template: "text_video",
-        layout: parseTextVideoLayout(o.layout),
-        body: typeof o.body === "string" ? o.body : "",
-        videoUrl: typeof o.videoUrl === "string" ? o.videoUrl : "",
-      };
+      return attachPageAudio(
+        {
+          v: 1,
+          template: "text_video",
+          layout: parseTextVideoLayout(o.layout),
+          body: typeof o.body === "string" ? o.body : "",
+          videoUrl: typeof o.videoUrl === "string" ? o.videoUrl : "",
+        },
+        o,
+      );
     case "two_column":
-      return {
-        v: 1,
-        template: "two_column",
-        left: typeof o.left === "string" ? o.left : "",
-        right: typeof o.right === "string" ? o.right : "",
-      };
+      return attachPageAudio(
+        {
+          v: 1,
+          template: "two_column",
+          left: typeof o.left === "string" ? o.left : "",
+          right: typeof o.right === "string" ? o.right : "",
+        },
+        o,
+      );
     case "embed_pdf":
-      return {
-        v: 1,
-        template: "embed_pdf",
-        intro: typeof o.intro === "string" ? o.intro : "",
-        pdfAssetId:
-          typeof o.pdfAssetId === "string" && o.pdfAssetId.length > 0
-            ? o.pdfAssetId
-            : null,
-        pdfUrl: typeof o.pdfUrl === "string" ? o.pdfUrl : "",
-      };
+      return attachPageAudio(
+        {
+          v: 1,
+          template: "embed_pdf",
+          intro: typeof o.intro === "string" ? o.intro : "",
+          pdfAssetId:
+            typeof o.pdfAssetId === "string" && o.pdfAssetId.length > 0
+              ? o.pdfAssetId
+              : null,
+          pdfUrl: typeof o.pdfUrl === "string" ? o.pdfUrl : "",
+        },
+        o,
+      );
     case "image_carousel":
-      return {
-        v: 1,
-        template: "image_carousel",
-        intro: typeof o.intro === "string" ? o.intro : "",
-        captionMode: parseImageCarouselCaptionMode(o.captionMode),
-        items: parseImageCarouselItems(o.items),
-      };
+      return attachPageAudio(
+        {
+          v: 1,
+          template: "image_carousel",
+          intro: typeof o.intro === "string" ? o.intro : "",
+          captionMode: parseImageCarouselCaptionMode(o.captionMode),
+          items: parseImageCarouselItems(o.items),
+        },
+        o,
+      );
     case "image_grid": {
       const layout = parseImageGridLayout(o.layout);
       const rowMode = parseImageGridRowMode(o.rowMode);
-      return {
-        v: 1,
-        template: "image_grid",
-        layout,
-        rowMode,
-        captionMode: parseImageGridCaptionMode(o.captionMode),
-        intro: typeof o.intro === "string" ? o.intro : "",
-        items: parseImageGridItems(o.items, layout, rowMode),
-      };
+      return attachPageAudio(
+        {
+          v: 1,
+          template: "image_grid",
+          layout,
+          rowMode,
+          captionMode: parseImageGridCaptionMode(o.captionMode),
+          intro: typeof o.intro === "string" ? o.intro : "",
+          items: parseImageGridItems(o.items, layout, rowMode),
+        },
+        o,
+      );
     }
     case "tabs":
-      return {
-        v: 1,
-        template: "tabs",
-        layout: parseTabLayout(o.layout),
-        tabs: parseTabs(o.tabs),
-      };
+      return attachPageAudio(
+        {
+          v: 1,
+          template: "tabs",
+          layout: parseTabLayout(o.layout),
+          tabs: parseTabs(o.tabs),
+        },
+        o,
+      );
     case "accordion":
-      return {
-        v: 1,
-        template: "accordion",
-        items: parseAccordionItems(o.items),
-      };
+      return attachPageAudio(
+        {
+          v: 1,
+          template: "accordion",
+          items: parseAccordionItems(o.items),
+        },
+        o,
+      );
+    case "click_reveal":
+      return attachPageAudio(
+        {
+          v: 1,
+          template: "click_reveal",
+          intro: typeof o.intro === "string" ? o.intro : "",
+          cards: parseClickRevealItems(o.cards),
+        },
+        o,
+      );
     case "course_completion":
-      return {
-        v: 1,
-        template: "course_completion",
-        summary: typeof o.summary === "string" ? o.summary : "",
-        logoAssetId:
-          typeof o.logoAssetId === "string" && o.logoAssetId.length > 0
-            ? o.logoAssetId
-            : null,
-        logoUrl: typeof o.logoUrl === "string" ? o.logoUrl : "",
-        logoAlt: typeof o.logoAlt === "string" ? o.logoAlt : "",
-        showPrintCertificate:
-          typeof o.showPrintCertificate === "boolean"
-            ? o.showPrintCertificate
-            : true,
-      };
+      return attachPageAudio(
+        {
+          v: 1,
+          template: "course_completion",
+          summary: typeof o.summary === "string" ? o.summary : "",
+          logoAssetId:
+            typeof o.logoAssetId === "string" && o.logoAssetId.length > 0
+              ? o.logoAssetId
+              : null,
+          logoUrl: typeof o.logoUrl === "string" ? o.logoUrl : "",
+          logoAlt: typeof o.logoAlt === "string" ? o.logoAlt : "",
+          showPrintCertificate:
+            typeof o.showPrintCertificate === "boolean"
+              ? o.showPrintCertificate
+              : true,
+        },
+        o,
+      );
     case "mcq": {
       const options = Array.isArray(o.options)
         ? o.options.map((x) => (typeof x === "string" ? x : ""))
@@ -340,13 +435,19 @@ export function parsePageContent(raw: Json | undefined): PageContentV1 {
         o.correctIndex < padded.length
           ? o.correctIndex
           : 0;
-      return {
-        v: 1,
-        template: "mcq",
-        question: typeof o.question === "string" ? o.question : "",
-        options: padded.slice(0, 8),
-        correctIndex,
-      };
+      return attachPageAudio(
+        attachQuestionFeedback(
+          {
+            v: 1,
+            template: "mcq",
+            question: typeof o.question === "string" ? o.question : "",
+            options: padded.slice(0, 8),
+            correctIndex,
+          },
+          o,
+        ),
+        o,
+      );
     }
     case "mrq": {
       const options = Array.isArray(o.options)
@@ -355,37 +456,55 @@ export function parsePageContent(raw: Json | undefined): PageContentV1 {
       const correctIndices = Array.isArray(o.correctIndices)
         ? o.correctIndices.filter((i): i is number => typeof i === "number")
         : [];
-      return {
-        v: 1,
-        template: "mrq",
-        question: typeof o.question === "string" ? o.question : "",
-        options: options.length ? options : ["", ""],
-        correctIndices,
-      };
+      return attachPageAudio(
+        attachQuestionFeedback(
+          {
+            v: 1,
+            template: "mrq",
+            question: typeof o.question === "string" ? o.question : "",
+            options: options.length ? options : ["", ""],
+            correctIndices,
+          },
+          o,
+        ),
+        o,
+      );
     }
     case "true_false":
-      return {
-        v: 1,
-        template: "true_false",
-        question: typeof o.question === "string" ? o.question : "",
-        correct: o.correct === false ? false : true,
-      };
+      return attachPageAudio(
+        attachQuestionFeedback(
+          {
+            v: 1,
+            template: "true_false",
+            question: typeof o.question === "string" ? o.question : "",
+            correct: o.correct === false ? false : true,
+          },
+          o,
+        ),
+        o,
+      );
     case "final_quiz":
-      return {
-        v: 1,
-        template: "final_quiz",
-        intro: typeof o.intro === "string" ? o.intro : "",
-      };
+      return attachPageAudio(
+        {
+          v: 1,
+          template: "final_quiz",
+          intro: typeof o.intro === "string" ? o.intro : "",
+        },
+        o,
+      );
     case "quiz_results":
-      return {
-        v: 1,
-        template: "quiz_results",
-        intro: typeof o.intro === "string" ? o.intro : "",
-        passMessage:
-          typeof o.passMessage === "string" ? o.passMessage : "",
-        failMessage:
-          typeof o.failMessage === "string" ? o.failMessage : "",
-      };
+      return attachPageAudio(
+        {
+          v: 1,
+          template: "quiz_results",
+          intro: typeof o.intro === "string" ? o.intro : "",
+          passMessage:
+            typeof o.passMessage === "string" ? o.passMessage : "",
+          failMessage:
+            typeof o.failMessage === "string" ? o.failMessage : "",
+        },
+        o,
+      );
     default:
       return defaultPageContent("text");
   }

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { buildAssetStoragePath } from "@/lib/assets/storage-path";
 import { createClient } from "@/lib/supabase/client";
 
-import type { CourseAssetLite } from "./text-image-media";
+import type { CourseAssetLite, AssetsUpdatedHandler } from "./text-image-media";
 
 export type PdfMediaValue = {
   pdfAssetId?: string | null;
@@ -17,7 +17,7 @@ type Props = {
   value: PdfMediaValue;
   onChange: (next: PdfMediaValue) => void;
   courseAssets: CourseAssetLite[];
-  onAssetsUpdated: () => void;
+  onAssetsUpdated: AssetsUpdatedHandler;
   idPrefix?: string;
 };
 
@@ -129,7 +129,14 @@ export function PdfMediaPanel({
           return;
         }
         onChange({ pdfAssetId: assetId, pdfUrl: "" });
-        onAssetsUpdated();
+        onAssetsUpdated({
+          id: assetId,
+          bucket: "assets",
+          storage_path: storagePath,
+          filename: file.name,
+          mime_type: file.type || "application/pdf",
+          bytes: file.size,
+        });
       } finally {
         setUploading(false);
       }

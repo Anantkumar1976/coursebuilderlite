@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { acceptTeamInvite } from "@/lib/actions/team";
 import {
@@ -20,45 +20,80 @@ export type SignupTeamInvite = {
   subscription_id: string;
 };
 
+type SignupFormState = {
+  plan: PaypalPlanKey;
+  paypalApproved: boolean;
+  subscriptionId: string | null;
+  info: string | null;
+};
+
+function readSignupFormState(invite?: SignupTeamInvite | null): SignupFormState {
+  if (invite) {
+    return {
+      plan: "starter",
+      paypalApproved: false,
+      subscriptionId: null,
+      info: null,
+    };
+  }
+  if (typeof window === "undefined") {
+    return {
+      plan: "starter",
+      paypalApproved: false,
+      subscriptionId: null,
+      info: null,
+    };
+  }
+  const params = new URLSearchParams(window.location.search);
+  const selectedPlan = params.get("plan");
+  const paypalState = params.get("paypal");
+  const paypalSubscriptionId = params.get("subscription_id");
+  let plan: PaypalPlanKey = "starter";
+  if (selectedPlan && Object.hasOwn(PAYPAL_PLAN_CONFIG, selectedPlan)) {
+    plan = selectedPlan as PaypalPlanKey;
+  }
+  if (paypalState === "approved" && paypalSubscriptionId) {
+    return {
+      plan,
+      paypalApproved: true,
+      subscriptionId: paypalSubscriptionId,
+      info: "PayPal subscription approved. Complete account creation below to activate access.",
+    };
+  }
+  if (paypalState === "cancelled") {
+    return {
+      plan,
+      paypalApproved: false,
+      subscriptionId: null,
+      info: "PayPal checkout was cancelled. You can try again anytime.",
+    };
+  }
+  return {
+    plan,
+    paypalApproved: false,
+    subscriptionId: null,
+    info: null,
+  };
+}
+
 export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [info, setInfo] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(() => readSignupFormState(invite).info);
   const [accountCreated, setAccountCreated] = useState(false);
-  const [plan, setPlan] = useState<PaypalPlanKey>("starter");
+  const [plan, setPlan] = useState<PaypalPlanKey>(() => readSignupFormState(invite).plan);
   const invitePlanConfig =
     invite && Object.hasOwn(PAYPAL_PLAN_CONFIG, invite.plan_key)
       ? PAYPAL_PLAN_CONFIG[invite.plan_key as PaypalPlanKey]
       : null;
   const [paypalPending, setPaypalPending] = useState(false);
-  const [paypalApproved, setPaypalApproved] = useState(false);
-  const [subscriptionId, setSubscriptionId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (invite) return;
-    if (typeof window === "undefined") {
-      return;
-    }
-    const params = new URLSearchParams(window.location.search);
-    const selectedPlan = params.get("plan");
-    const paypalState = params.get("paypal");
-    const paypalSubscriptionId = params.get("subscription_id");
-    if (selectedPlan && Object.hasOwn(PAYPAL_PLAN_CONFIG, selectedPlan)) {
-      setPlan(selectedPlan as PaypalPlanKey);
-    }
-    if (paypalState === "approved" && paypalSubscriptionId) {
-      setPaypalApproved(true);
-      setSubscriptionId(paypalSubscriptionId);
-      setInfo(
-        "PayPal subscription approved. Complete account creation below to activate access.",
-      );
-      return;
-    }
-    if (paypalState === "cancelled") {
-      setInfo("PayPal checkout was cancelled. You can try again anytime.");
-    }
-  }, [invite]);
+  const [paypalApproved, setPaypalApproved] = useState(
+    () => readSignupFormState(invite).paypalApproved,
+  );
+  const [subscriptionId, setSubscriptionId] = useState<string | null>(
+    () => readSignupFormState(invite).subscriptionId,
+  );
 
   async function handlePaypalSubscribe() {
     setError(null);

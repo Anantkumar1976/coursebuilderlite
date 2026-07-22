@@ -10,6 +10,10 @@ type Props = {
   attemptsLimit: number | null;
   attemptsUsed: number;
   themeColors: ThemeColors;
+  /** Override the "back to home" route (e.g. `/demo/{id}`). */
+  launchHref?: string;
+  /** Hide author-only settings link (used on public demo pages). */
+  hideAuthorLinks?: boolean;
 };
 
 export function CourseLocked({
@@ -18,6 +22,8 @@ export function CourseLocked({
   attemptsLimit,
   attemptsUsed,
   themeColors,
+  launchHref,
+  hideAuthorLinks = false,
 }: Props) {
   return (
     <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center bg-zinc-100 px-4 py-12 dark:bg-zinc-900/80">
@@ -46,18 +52,20 @@ export function CourseLocked({
         </p>
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           <Link
-            href={`/courses/${courseId}/play`}
+            href={launchHref ?? `/courses/${courseId}/play`}
             className="inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
             style={{ backgroundColor: themeColors.button }}
           >
             Back to course home
           </Link>
-          <Link
-            href={`/courses/${courseId}`}
-            className="text-sm font-medium text-zinc-600 underline-offset-4 hover:underline dark:text-zinc-300"
-          >
-            Course settings
-          </Link>
+          {hideAuthorLinks ? null : (
+            <Link
+              href={`/courses/${courseId}`}
+              className="text-sm font-medium text-zinc-600 underline-offset-4 hover:underline dark:text-zinc-300"
+            >
+              Course settings
+            </Link>
+          )}
         </div>
       </div>
     </div>

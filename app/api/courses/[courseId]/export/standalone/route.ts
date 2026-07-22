@@ -37,7 +37,6 @@ export async function GET(
         "id, title, description, locale, scorm_passing_score_percent, assessment_attempts_limit, manifest_description, estimated_duration_minutes, custom_css",
       )
       .eq("id", courseId)
-      .eq("user_id", user.id)
       .maybeSingle();
 
     if (error || !course) {

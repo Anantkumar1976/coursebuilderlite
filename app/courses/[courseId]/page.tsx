@@ -4,8 +4,11 @@ import { notFound } from "next/navigation";
 import { CourseAssessmentAttemptsField } from "@/components/course-settings/course-assessment-attempts-field";
 import { CourseAttemptsField } from "@/components/course-settings/course-attempts-field";
 import { CourseBannerUpload } from "@/components/course-settings/course-banner-upload";
+import { CourseFeaturedSection } from "@/components/course-settings/course-featured-section";
 import { CourseReferenceMaterialsEditor } from "@/components/course-settings/course-reference-materials";
 import { updateCourseSettings } from "@/lib/actions/course";
+import { isMasterAdminUser } from "@/lib/auth/admin";
+import { getSiteUrl } from "@/lib/auth/site-url";
 import { parseAttemptsLimit } from "@/lib/course-player/attempts";
 import {
   NAVIGATION_FLOW_LABELS,
@@ -95,6 +98,10 @@ export default async function CourseDetailPage({
   const saveErrorDetail = sp.e ?? null;
 
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const canFeature = isMasterAdminUser(user);
   // Use * so missing migrations (extra columns) do not make this query fail with 404.
   const { data: course, error } = await supabase
     .from("courses")
@@ -105,6 +112,12 @@ export default async function CourseDetailPage({
   if (error || !course) {
     notFound();
   }
+
+  const isFeatured =
+    typeof (course as Record<string, unknown>).is_featured === "boolean"
+      ? Boolean((course as Record<string, unknown>).is_featured)
+      : false;
+  const demoShareUrl = `${getSiteUrl()}/demo/${course.id}`;
 
   const { data: referenceRows, error: referenceError } = await supabase
     .from("course_reference_materials")
@@ -483,6 +496,12 @@ export default async function CourseDetailPage({
               className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
             />
           </div>
+          {canFeature ? (
+            <CourseFeaturedSection
+              initialFeatured={isFeatured}
+              shareUrl={demoShareUrl}
+            />
+          ) : null}
           {settingsMessage(err, saved, saveErrorDetail)}
           <button
             type="submit"
@@ -503,12 +522,16 @@ export default async function CourseDetailPage({
         <div className="mt-6 flex flex-wrap gap-3">
           <Link
             href={`/courses/${courseId}/builder`}
+            target="_blank"
+            rel="noopener noreferrer"
             className="inline-flex h-10 items-center justify-center rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
           >
             Open page builder
           </Link>
           <Link
             href={`/courses/${courseId}/play`}
+            target="_blank"
+            rel="noopener noreferrer"
             className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
           >
             Preview course

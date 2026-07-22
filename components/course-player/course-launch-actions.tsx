@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   attemptsSummary,
@@ -10,7 +10,6 @@ import {
   clearCourseLearnerState,
   isCourseLocked,
   readAttemptsState,
-  type AttemptsState,
 } from "@/lib/course-player/attempts";
 import { readStoredPageIndex } from "@/lib/course-player/progress";
 import { parseThemeColors } from "@/lib/course-theme/theme";
@@ -22,6 +21,10 @@ type Props = {
   themeColorsJson: Json;
   attemptsLimit: number | null;
   manualMode?: boolean;
+  /** Override the play content path (e.g. `/demo/{id}/play`). */
+  contentHref?: string;
+  /** Override the "back" link shown when locked (e.g. `/demo/{id}`). */
+  backHref?: string;
 };
 
 export function CourseLaunchActions({
@@ -30,16 +33,37 @@ export function CourseLaunchActions({
   themeColorsJson,
   attemptsLimit,
   manualMode = false,
+  contentHref,
+  backHref,
 }: Props) {
   const colors = parseThemeColors(themeColorsJson);
   const router = useRouter();
-  const [startAt, setStartAt] = useState(0);
-  const [attempts, setAttempts] = useState<AttemptsState | null>(null);
+  // Defer localStorage reads until after mount so SSR HTML matches the first
+  // client paint (avoids "Begin course" vs "Resume course" hydration mismatch).
+  const [hydrated, setHydrated] = useState(false);
+  const [attemptsVersion, setAttemptsVersion] = useState(0);
 
   useEffect(() => {
-    setAttempts(readAttemptsState(courseId));
+    setHydrated(true);
+  }, []);
+
+  const attempts = useMemo(() => {
+    if (!hydrated) return null;
+    return readAttemptsState(courseId);
+    // attemptsVersion intentionally triggers re-read after local storage updates
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- version bump is the refresh signal
+  }, [courseId, attemptsVersion, hydrated]);
+
+  const startAt = useMemo(() => {
+    if (!hydrated || pageCount <= 0) return 0;
+    const raw = readStoredPageIndex(courseId);
+    const maxIdx = Math.max(0, pageCount - 1);
+    return Math.min(Math.max(0, raw), maxIdx);
+  }, [courseId, pageCount, hydrated]);
+
+  useEffect(() => {
     function refresh() {
-      setAttempts(readAttemptsState(courseId));
+      setAttemptsVersion((version) => version + 1);
     }
     window.addEventListener("cbl-attempts-updated", refresh);
     window.addEventListener("storage", refresh);
@@ -49,34 +73,28 @@ export function CourseLaunchActions({
     };
   }, [courseId]);
 
-  useEffect(() => {
-    if (pageCount <= 0) return;
-    const raw = readStoredPageIndex(courseId);
-    const maxIdx = Math.max(0, pageCount - 1);
-    setStartAt(Math.min(Math.max(0, raw), maxIdx));
-  }, [courseId, pageCount]);
-
   const locked =
-    attempts !== null && isCourseLocked(attempts, attemptsLimit);
-  const active = attempts?.active === true;
+    hydrated && attempts !== null && isCourseLocked(attempts, attemptsLimit);
+  const active = hydrated && attempts?.active === true;
   const canResume = active && startAt > 0;
 
+  const basePlayHref = contentHref ?? `/courses/${courseId}/play/content`;
   const handleBegin = useCallback(() => {
     if (active) {
       router.push(
-        `/courses/${courseId}/play/content${startAt > 0 ? `?start=${startAt}` : ""}`,
+        `${basePlayHref}${startAt > 0 ? `?start=${startAt}` : ""}`,
       );
       return;
     }
     clearCourseLearnerState(courseId);
     const result = beginAttempt(courseId, attemptsLimit);
     if (result.locked) {
-      setAttempts(result.state);
+      setAttemptsVersion((version) => version + 1);
       return;
     }
-    setAttempts(result.state);
-    router.push(`/courses/${courseId}/play/content`);
-  }, [active, attemptsLimit, courseId, router, startAt]);
+    setAttemptsVersion((version) => version + 1);
+    router.push(basePlayHref);
+  }, [active, attemptsLimit, basePlayHref, courseId, router, startAt]);
 
   if (pageCount === 0) {
     return (
@@ -125,7 +143,7 @@ export function CourseLaunchActions({
         </button>
         {locked ? (
           <Link
-            href={`/courses/${courseId}`}
+            href={backHref ?? `/courses/${courseId}`}
             className="text-sm font-medium text-zinc-600 underline-offset-4 hover:underline dark:text-zinc-300"
           >
             {manualMode ? "Back to manual" : "Back to course"}

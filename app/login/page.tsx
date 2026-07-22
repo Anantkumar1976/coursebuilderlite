@@ -16,6 +16,9 @@ function getLoginErrorMessage(code: string | undefined) {
   if (code === "subscription-inactive") {
     return "Your subscription is inactive. Please reactivate it to continue.";
   }
+  if (code === "auth-callback") {
+    return "That sign-in link is invalid or has expired. Request a new password reset link or sign in again.";
+  }
   return null;
 }
 

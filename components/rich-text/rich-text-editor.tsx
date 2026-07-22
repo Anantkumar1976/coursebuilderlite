@@ -1,11 +1,16 @@
 "use client";
 
 import { Color, FontSize, TextStyle } from "@tiptap/extension-text-style";
+import Underline from "@tiptap/extension-underline";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { StarterKit } from "@tiptap/starter-kit";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { plainTextToTipTapHtml } from "@/lib/rich-text/legacy-plain-to-html";
+import {
+  TextAlign,
+  type TextAlignValue,
+} from "@/lib/rich-text/text-align";
 
 const FONT_SIZE_OPTIONS: { label: string; value: string }[] = [
   { label: "Default", value: "" },
@@ -19,14 +24,33 @@ const FONT_SIZE_OPTIONS: { label: string; value: string }[] = [
   { label: "32px", value: "32px" },
 ];
 
-const PRESET_COLORS = [
+const PRESET_COLORS: { label: string; value: string }[] = [
   { label: "Default", value: "" },
+  { label: "Black", value: "#18181b" },
+  { label: "Slate", value: "#475569" },
   { label: "Red", value: "#b91c1c" },
   { label: "Orange", value: "#c2410c" },
+  { label: "Amber", value: "#b45309" },
   { label: "Green", value: "#15803d" },
+  { label: "Teal", value: "#0f766e" },
   { label: "Blue", value: "#1d4ed8" },
+  { label: "Indigo", value: "#4338ca" },
   { label: "Purple", value: "#7c3aed" },
+  { label: "Pink", value: "#be185d" },
 ];
+
+const HEX_COLOR_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
+function normalizeHexColor(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!HEX_COLOR_RE.test(trimmed)) return null;
+  if (trimmed.length === 4) {
+    // Expand #abc → #aabbcc
+    const [, r, g, b] = trimmed;
+    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+  }
+  return trimmed.toLowerCase();
+}
 
 function ToolbarButton({
   active,
@@ -74,6 +98,7 @@ export function RichTextEditor({
   minHeight = "min-h-[200px]",
 }: Props) {
   const lastEmitted = useRef<string | null>(null);
+  const [hexDraft, setHexDraft] = useState("");
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -95,14 +120,20 @@ export function RichTextEditor({
           },
         },
       }),
+      Underline,
       TextStyle,
       FontSize.configure({ types: ["textStyle"] }),
       Color.configure({ types: ["textStyle"] }),
+      TextAlign.configure({
+        types: ["heading", "paragraph"],
+        alignments: ["left", "center", "right"],
+        defaultAlignment: "left",
+      }),
     ],
     content: plainTextToTipTapHtml(value),
     editorProps: {
       attributes: {
-        class: `focus:outline-none ${minHeight} px-0 py-1 text-sm text-zinc-900 dark:text-zinc-50`,
+        class: `cb-rte-body focus:outline-none ${minHeight} px-0 py-1 text-sm text-zinc-900 dark:text-zinc-50`,
         "aria-label": ariaLabel ?? "Rich text body",
         ...(id ? { id } : {}),
       },
@@ -122,6 +153,21 @@ export function RichTextEditor({
     });
     lastEmitted.current = editor.getHTML();
   }, [value, editor]);
+
+  useEffect(() => {
+    if (!editor) return;
+    const syncHex = () => {
+      const color = String(editor.getAttributes("textStyle").color ?? "");
+      setHexDraft(color);
+    };
+    syncHex();
+    editor.on("selectionUpdate", syncHex);
+    editor.on("transaction", syncHex);
+    return () => {
+      editor.off("selectionUpdate", syncHex);
+      editor.off("transaction", syncHex);
+    };
+  }, [editor]);
 
   if (!editor) {
     return (
@@ -146,6 +192,8 @@ export function RichTextEditor({
       ]
     : FONT_SIZE_OPTIONS;
 
+  const currentColor = String(ed.getAttributes("textStyle").color ?? "");
+
   function setLink() {
     const prev = ed.getAttributes("link").href as string | undefined;
     const next = window.prompt(
@@ -163,6 +211,17 @@ export function RichTextEditor({
       url = `https://${url}`;
     }
     ed.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+  }
+
+  function applyHexColor() {
+    const normalized = normalizeHexColor(hexDraft);
+    if (!normalized) return;
+    ed.chain().focus().setColor(normalized).run();
+    setHexDraft(normalized);
+  }
+
+  function setAlign(alignment: TextAlignValue) {
+    ed.chain().focus().setTextAlign(alignment).run();
   }
 
   return (
@@ -226,6 +285,28 @@ export function RichTextEditor({
         </select>
         <span className="mx-1 h-4 w-px bg-zinc-300 dark:bg-zinc-600" aria-hidden />
         <ToolbarButton
+          title="Align left"
+          active={ed.isActive({ textAlign: "left" })}
+          onClick={() => setAlign("left")}
+        >
+          Left
+        </ToolbarButton>
+        <ToolbarButton
+          title="Align center"
+          active={ed.isActive({ textAlign: "center" })}
+          onClick={() => setAlign("center")}
+        >
+          Center
+        </ToolbarButton>
+        <ToolbarButton
+          title="Align right"
+          active={ed.isActive({ textAlign: "right" })}
+          onClick={() => setAlign("right")}
+        >
+          Right
+        </ToolbarButton>
+        <span className="mx-1 h-4 w-px bg-zinc-300 dark:bg-zinc-600" aria-hidden />
+        <ToolbarButton
           title="Heading 2"
           active={ed.isActive("heading", { level: 2 })}
           onClick={() =>
@@ -268,8 +349,11 @@ export function RichTextEditor({
         </span>
         <ToolbarButton
           title="Default color"
-          active={!ed.getAttributes("textStyle").color}
-          onClick={() => ed.chain().focus().unsetColor().run()}
+          active={!currentColor}
+          onClick={() => {
+            ed.chain().focus().unsetColor().run();
+            setHexDraft("");
+          }}
         >
           Auto
         </ToolbarButton>
@@ -278,17 +362,52 @@ export function RichTextEditor({
             key={c.value}
             type="button"
             title={`${c.label} text`}
-            onClick={() =>
-              ed.chain().focus().setColor(c.value as string).run()
-            }
-            className="h-6 w-6 shrink-0 rounded border border-zinc-300 ring-offset-1 hover:ring-2 hover:ring-zinc-400 dark:border-zinc-600"
+            onClick={() => {
+              ed.chain().focus().setColor(c.value).run();
+              setHexDraft(c.value);
+            }}
+            className={`h-6 w-6 shrink-0 rounded border border-zinc-300 ring-offset-1 hover:ring-2 hover:ring-zinc-400 dark:border-zinc-600 ${
+              currentColor.toLowerCase() === c.value.toLowerCase()
+                ? "ring-2 ring-zinc-500"
+                : ""
+            }`}
             style={{ backgroundColor: c.value }}
           />
         ))}
+        <label className="sr-only" htmlFor="rte-hex-color">
+          Custom hex color
+        </label>
+        <input
+          id="rte-hex-color"
+          type="text"
+          inputMode="text"
+          spellCheck={false}
+          placeholder="#1d4ed8"
+          title="Custom hex color (e.g. #1d4ed8)"
+          value={hexDraft}
+          onChange={(e) => setHexDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              applyHexColor();
+            }
+          }}
+          onBlur={applyHexColor}
+          className="w-[5.5rem] rounded border border-zinc-200 bg-white px-1.5 py-1 font-mono text-xs text-zinc-800 outline-none ring-zinc-400 focus:ring-2 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200"
+        />
+        <button
+          type="button"
+          title="Apply hex color"
+          onClick={applyHexColor}
+          disabled={!normalizeHexColor(hexDraft)}
+          className="rounded bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-800 hover:bg-zinc-200 disabled:opacity-40 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+        >
+          Apply
+        </button>
       </div>
       <EditorContent
         editor={ed}
-        className={`bg-white px-3 py-2 dark:bg-zinc-950 [&_.ProseMirror]:outline-none ${minHeight}`}
+        className={`cb-rte bg-white px-3 py-2 dark:bg-zinc-950 [&_.ProseMirror]:outline-none ${minHeight}`}
       />
     </div>
   );

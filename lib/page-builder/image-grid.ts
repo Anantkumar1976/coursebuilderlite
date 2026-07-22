@@ -40,8 +40,9 @@ function imageGridColumns(layout: ImageGridLayout): number {
 
 export function imageGridCellCount(
   layout: ImageGridLayout,
-  _rowMode: ImageGridRowMode,
+  rowMode: ImageGridRowMode,
 ): number {
+  void rowMode;
   const cols = imageGridColumns(layout);
   return cols * cols;
 }

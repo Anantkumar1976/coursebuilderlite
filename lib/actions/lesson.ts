@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { canAccessCourse } from "@/lib/workspace/access";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -16,23 +17,16 @@ async function requireUser() {
   return { supabase, user };
 }
 
-async function assertCourseOwner(
+async function assertCourseAccess(
   supabase: Awaited<ReturnType<typeof createClient>>,
   courseId: string,
-  userId: string,
 ) {
-  const { data } = await supabase
-    .from("courses")
-    .select("id")
-    .eq("id", courseId)
-    .eq("user_id", userId)
-    .maybeSingle();
-  return !!data;
+  return canAccessCourse(supabase, courseId);
 }
 
 export async function createLesson(courseId: string, title?: string) {
-  const { supabase, user } = await requireUser();
-  if (!(await assertCourseOwner(supabase, courseId, user.id))) {
+  const { supabase } = await requireUser();
+  if (!(await assertCourseAccess(supabase, courseId))) {
     return { error: "Course not found." as const };
   }
 
@@ -71,8 +65,8 @@ export async function saveLessonTitle(
   lessonId: string,
   title: string,
 ) {
-  const { supabase, user } = await requireUser();
-  if (!(await assertCourseOwner(supabase, courseId, user.id))) {
+  const { supabase } = await requireUser();
+  if (!(await assertCourseAccess(supabase, courseId))) {
     return { error: "Course not found." as const };
   }
 
@@ -95,8 +89,8 @@ export async function reorderLessons(
   courseId: string,
   orderedLessonIds: string[],
 ) {
-  const { supabase, user } = await requireUser();
-  if (!(await assertCourseOwner(supabase, courseId, user.id))) {
+  const { supabase } = await requireUser();
+  if (!(await assertCourseAccess(supabase, courseId))) {
     return { error: "Course not found." as const };
   }
 
@@ -130,8 +124,8 @@ export async function reorderLessons(
 }
 
 export async function deleteLesson(courseId: string, lessonId: string) {
-  const { supabase, user } = await requireUser();
-  if (!(await assertCourseOwner(supabase, courseId, user.id))) {
+  const { supabase } = await requireUser();
+  if (!(await assertCourseAccess(supabase, courseId))) {
     return { error: "Course not found." as const };
   }
 
