@@ -10,8 +10,9 @@ import {
   themeFontsToJson,
 } from "@/lib/course-theme/theme";
 import { createClient } from "@/lib/supabase/server";
+import { canAccessCourse } from "@/lib/workspace/access";
 
-async function requireOwnerCourse(courseId: string) {
+async function requireWorkspaceCourse(courseId: string) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -19,13 +20,7 @@ async function requireOwnerCourse(courseId: string) {
   if (!user) {
     redirect("/login");
   }
-  const { data: course } = await supabase
-    .from("courses")
-    .select("id")
-    .eq("id", courseId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (!course) {
+  if (!(await canAccessCourse(supabase, courseId))) {
     redirect("/courses");
   }
   return { supabase, user };
@@ -35,7 +30,7 @@ export async function updateCourseAppearanceSettings(
   courseId: string,
   formData: FormData,
 ) {
-  const { supabase } = await requireOwnerCourse(courseId);
+  const { supabase } = await requireWorkspaceCourse(courseId);
 
   const fonts = parseThemeFonts({
     courseTitle: String(formData.get("font_course_title") ?? ""),
@@ -100,7 +95,7 @@ export async function setCourseBannerAsset(
   courseId: string,
   assetId: string | null,
 ) {
-  const { supabase, user } = await requireOwnerCourse(courseId);
+  const { supabase } = await requireWorkspaceCourse(courseId);
 
   if (assetId) {
     const { data: asset } = await supabase
@@ -110,7 +105,6 @@ export async function setCourseBannerAsset(
       .maybeSingle();
     if (
       !asset ||
-      asset.user_id !== user.id ||
       asset.course_id !== courseId ||
       !(asset.mime_type?.startsWith("image/") ?? false)
     ) {
@@ -138,14 +132,14 @@ export async function addCourseReferenceMaterial(
   assetId: string,
   label: string,
 ) {
-  const { supabase, user } = await requireOwnerCourse(courseId);
+  const { supabase } = await requireWorkspaceCourse(courseId);
 
   const { data: asset } = await supabase
     .from("assets")
     .select("id, course_id, user_id")
     .eq("id", assetId)
     .maybeSingle();
-  if (!asset || asset.user_id !== user.id || asset.course_id !== courseId) {
+  if (!asset || asset.course_id !== courseId) {
     return { error: "invalid-asset" as const };
   }
 
@@ -183,7 +177,7 @@ export async function deleteCourseReferenceMaterialAction(formData: FormData) {
     redirect("/courses?error=bad-request");
   }
 
-  const { supabase } = await requireOwnerCourse(courseId);
+  const { supabase } = await requireWorkspaceCourse(courseId);
 
   const { error } = await supabase
     .from("course_reference_materials")

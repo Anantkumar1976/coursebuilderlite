@@ -1,9 +1,14 @@
 import { videoEmbedUrl } from "@/lib/course-player/embed-url";
 import {
   TEMPLATE_LABELS,
+  hasQuestionFeedback,
+  normalizeClickRevealItems,
   normalizeImageCarouselItems,
   normalizeImageGridItems,
+  scormClickRevealGridClass,
+  type ClickRevealItem,
   type PageContentV1,
+  type QuestionFeedbackFields,
 } from "@/lib/page-builder";
 import {
   blockCountForLayout,
@@ -133,6 +138,94 @@ function textImageFigureHtml(src: string, alt: string): string {
   return src
     ? `<figure class="cb-figure"><img src="${escapeAttr(src)}" alt="${escapeAttr(alt)}" loading="lazy"/>${alt ? `<figcaption>${escapeHtml(alt)}</figcaption>` : ""}</figure>`
     : '<p class="cb-muted">No image set.</p>';
+}
+
+function questionFeedbackAudioSrc(
+  assetId: string | null | undefined,
+  scorm?: Record<string, string>,
+): string {
+  if (assetId && scorm?.[assetId]) return scorm[assetId];
+  return "";
+}
+
+function questionFeedbackAttrs(
+  content: QuestionFeedbackFields,
+  scorm?: Record<string, string>,
+): string {
+  if (!hasQuestionFeedback(content)) return "";
+  const correctAudio = questionFeedbackAudioSrc(
+    content.correctFeedbackAudioAssetId,
+    scorm,
+  );
+  const incorrectAudio = questionFeedbackAudioSrc(
+    content.incorrectFeedbackAudioAssetId,
+    scorm,
+  );
+  return ` data-kc-feedback="true" data-correct-audio="${escapeAttr(correctAudio)}" data-incorrect-audio="${escapeAttr(incorrectAudio)}"`;
+}
+
+function questionFeedbackMarkup(content: QuestionFeedbackFields): string {
+  if (!hasQuestionFeedback(content)) return "";
+  return `<div class="cb-kc-feedback-src" hidden><div class="cb-kc-correct">${bodyContentForExport(content.correctFeedback ?? "")}</div><div class="cb-kc-incorrect">${bodyContentForExport(content.incorrectFeedback ?? "")}</div></div>`;
+}
+
+function clickRevealImageSrc(
+  assetId: string | null | undefined,
+  url: string,
+  scorm?: Record<string, string>,
+): string {
+  if (assetId && scorm?.[assetId]) return scorm[assetId];
+  return url.trim();
+}
+
+function clickRevealCardFrontHtml(
+  card: ClickRevealItem,
+  index: number,
+  scorm?: Record<string, string>,
+): string {
+  const src = clickRevealImageSrc(
+    card.cardImageAssetId,
+    card.cardImageUrl,
+    scorm,
+  );
+  const img = src
+    ? `<div class="cb-cr-media"><img src="${escapeAttr(src)}" alt="${escapeAttr(card.cardImageAlt || card.cardTitle || `Item ${index + 1}`)}" loading="lazy"/></div>`
+    : "";
+  const title = card.cardTitle.trim()
+    ? `<p class="cb-cr-title">${escapeHtml(card.cardTitle)}</p>`
+    : "";
+  const body = card.cardBody.trim()
+    ? `<div class="cb-cr-teaser">${bodyContentForExport(card.cardBody)}</div>`
+    : "";
+  const cta = `<span class="cb-cr-cta">Learn more…</span>`;
+  return `<button type="button" class="cb-cr-card" data-cr-index="${index}">${img}<div class="cb-cr-card-body">${title}${body}${cta}</div></button>`;
+}
+
+function clickRevealPanelHtml(
+  card: ClickRevealItem,
+  index: number,
+  scorm?: Record<string, string>,
+): string {
+  const revealSrc =
+    clickRevealImageSrc(card.revealImageAssetId, card.revealImageUrl, scorm) ||
+    clickRevealImageSrc(card.cardImageAssetId, card.cardImageUrl, scorm);
+  const img = revealSrc
+    ? `<img class="cb-cr-dialog-img" src="${escapeAttr(revealSrc)}" alt="${escapeAttr(card.revealImageAlt || card.cardImageAlt || card.revealTitle || card.cardTitle || `Item ${index + 1}`)}" loading="lazy"/>`
+    : "";
+  const title = escapeHtml(
+    card.revealTitle.trim() || card.cardTitle.trim() || "Details",
+  );
+  const body = card.revealBody.trim()
+    ? `<div class="cb-block">${bodyContentForExport(card.revealBody)}</div>`
+    : "";
+  const audioSrc =
+    card.revealAudioAssetId && scorm?.[card.revealAudioAssetId]
+      ? scorm[card.revealAudioAssetId]
+      : "";
+  const audioAttr = audioSrc
+    ? ` data-cr-audio-src="${escapeAttr(audioSrc)}"`
+    : "";
+  return `<div class="cb-cr-panel" data-cr-panel="${index}" hidden${audioAttr}>${img}<div class="cb-cr-panel-body"><h3 class="cb-cr-dialog-title">${title}</h3>${body}<button type="button" class="cb-cr-back">Go back</button></div></div>`;
 }
 
 function bodyParagraphs(text: string): string {
@@ -357,20 +450,53 @@ export function pageContentToHtml(
         .join("")}`;
     }
 
+    case "click_reveal": {
+      const cards = normalizeClickRevealItems(content.cards).filter(
+        (card) =>
+          card.cardTitle.trim() ||
+          card.cardBody.trim() ||
+          clickRevealImageSrc(
+            card.cardImageAssetId,
+            card.cardImageUrl,
+            scorm?.scormRelative,
+          ),
+      );
+      const intro = content.intro.trim()
+        ? `<div class="cb-block">${bodyContentForExport(content.intro)}</div>`
+        : "";
+      const gridClass = scormClickRevealGridClass(cards.length);
+      const cardButtons = cards
+        .map((card, i) =>
+          clickRevealCardFrontHtml(card, i, scorm?.scormRelative),
+        )
+        .join("");
+      const panels = cards
+        .map((card, i) =>
+          clickRevealPanelHtml(card, i, scorm?.scormRelative),
+        )
+        .join("");
+      return `${badge}${intro}<div class="cb-click-reveal" data-interactive="click-reveal"><div class="cb-cr-grid ${gridClass}">${cardButtons}</div><div class="cb-cr-dialog" hidden aria-hidden="true"><div class="cb-cr-dialog-backdrop"></div><div class="cb-cr-dialog-shell" role="dialog" aria-modal="true"><div class="cb-cr-dialog-inner">${panels}</div></div></div></div>`;
+    }
+
     case "course_completion":
       return `${badge}<div class="cb-final"><p class="cb-final-h">Course completion</p><div class="cb-block">${bodyContentForExport(content.summary)}</div><p class="cb-note">Certificate printing is available in the web player.</p></div>`;
 
     case "mcq": {
+      const kc = hasQuestionFeedback(content);
       const opts = content.options
         .map(
           (opt, idx) =>
             `<li><button type="button" class="cb-opt" data-index="${idx}">${escapeHtml(opt || `Option ${idx + 1}`)}</button></li>`,
         )
         .join("");
-      return `${badge}<div class="cb-assess cb-mcq" data-correct-index="${content.correctIndex}"><p class="cb-q">${escapeHtml(content.question || "Question")}</p><ul class="cb-opt-list">${opts}</ul><p class="cb-feedback" hidden></p></div>`;
+      const submitBtn = kc
+        ? `<button type="button" class="cb-submit-btn">Submit</button>`
+        : "";
+      return `${badge}<div class="cb-assess cb-mcq" data-correct-index="${content.correctIndex}"${questionFeedbackAttrs(content, scorm?.scormRelative)}><p class="cb-q">${escapeHtml(content.question || "Question")}</p><ul class="cb-opt-list">${opts}</ul>${submitBtn}<div class="cb-feedback" hidden></div>${questionFeedbackMarkup(content)}</div>`;
     }
 
     case "mrq": {
+      const kc = hasQuestionFeedback(content);
       const correctJson = escapeAttr(JSON.stringify(content.correctIndices));
       const opts = content.options
         .map(
@@ -378,11 +504,16 @@ export function pageContentToHtml(
             `<li><label class="cb-mrq-label"><input type="checkbox" class="cb-mrq-cb" data-index="${idx}"/> <span>${escapeHtml(opt || `Option ${idx + 1}`)}</span></label></li>`,
         )
         .join("");
-      return `${badge}<div class="cb-assess cb-mrq" data-correct-indices="${correctJson}"><p class="cb-q">${escapeHtml(content.question || "Question")}</p><ul class="cb-opt-list">${opts}</ul><button type="button" class="cb-check-btn">Check answer</button><p class="cb-feedback" hidden></p></div>`;
+      return `${badge}<div class="cb-assess cb-mrq" data-correct-indices="${correctJson}"${questionFeedbackAttrs(content, scorm?.scormRelative)}><p class="cb-q">${escapeHtml(content.question || "Question")}</p><ul class="cb-opt-list">${opts}</ul><button type="button" class="cb-check-btn">${kc ? "Submit" : "Check answer"}</button><div class="cb-feedback" hidden></div>${questionFeedbackMarkup(content)}</div>`;
     }
 
-    case "true_false":
-      return `${badge}<div class="cb-assess cb-tf" data-correct="${content.correct ? "true" : "false"}"><p class="cb-q">${escapeHtml(content.question || "Statement")}</p><div class="cb-tf-btns"><button type="button" class="cb-tf-btn" data-val="true">True</button><button type="button" class="cb-tf-btn" data-val="false">False</button></div><p class="cb-feedback" hidden></p></div>`;
+    case "true_false": {
+      const kc = hasQuestionFeedback(content);
+      const submitBtn = kc
+        ? `<button type="button" class="cb-submit-btn">Submit</button>`
+        : "";
+      return `${badge}<div class="cb-assess cb-tf" data-correct="${content.correct ? "true" : "false"}"${questionFeedbackAttrs(content, scorm?.scormRelative)}><p class="cb-q">${escapeHtml(content.question || "Statement")}</p><div class="cb-tf-btns"><button type="button" class="cb-tf-btn" data-val="true">True</button><button type="button" class="cb-tf-btn" data-val="false">False</button></div>${submitBtn}<div class="cb-feedback" hidden></div>${questionFeedbackMarkup(content)}</div>`;
+    }
 
     case "final_quiz":
       return `${badge}<div class="cb-final"><div class="cb-block">${bodyContentForExport(content.intro)}</div><p class="cb-note">Add separate question pages in the lesson; the LMS can aggregate scores from those pages.</p></div>`;

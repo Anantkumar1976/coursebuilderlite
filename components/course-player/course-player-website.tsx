@@ -29,9 +29,12 @@ import {
   writePlayProgress,
 } from "@/lib/course-player/progress";
 import type { LessonNav, PlayerPage } from "@/lib/course-player/types";
+import { getPageAudioTranscript, resolvePageAudioSrc } from "@/lib/page-builder";
 
 import { CourseLocked } from "./course-locked";
 import { CoursePlayerSidebar } from "./course-player-sidebar";
+import { PageAudioControls, PageAudioHost } from "./page-audio-host";
+import { isKnowledgeCheckQuestionPage } from "@/lib/course-player/final-assessment-lesson";
 import { TemplateRenderer } from "./template-renderer";
 
 type ReferenceItem = {
@@ -63,6 +66,10 @@ type Props = {
   assessmentAttemptsLimit: number | null;
   learnerName: string;
   customCss?: string | null;
+  /** Override the manual home route (e.g. `/demo/{id}`). */
+  launchHref?: string;
+  /** Hide author-only UI (Settings, Builder) — used on public demo pages. */
+  hideAuthorLinks?: boolean;
 };
 
 export function CoursePlayerWebsite({
@@ -80,6 +87,8 @@ export function CoursePlayerWebsite({
   assessmentAttemptsLimit,
   learnerName,
   customCss,
+  launchHref,
+  hideAuthorLinks = false,
 }: Props) {
   const flat = useMemo<FlatItem[]>(() => {
     const out: FlatItem[] = [];
@@ -125,10 +134,25 @@ export function CoursePlayerWebsite({
     visitedIds: [] as string[],
   });
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
-  const [finalQuizSnapshot, setFinalQuizSnapshot] = useState<
-    ReturnType<typeof readFinalQuizResult>
-  >(null);
+  const [finalQuizSnapshot, setFinalQuizSnapshot] = useState(() =>
+    readFinalQuizResult(courseId),
+  );
+  const [syncedFinalQuizCourseId, setSyncedFinalQuizCourseId] =
+    useState(courseId);
+  if (syncedFinalQuizCourseId !== courseId) {
+    setSyncedFinalQuizCourseId(courseId);
+    setFinalQuizSnapshot(readFinalQuizResult(courseId));
+  }
+
+  const attemptsScope = `${courseId}:${attemptsLimit ?? "none"}`;
   const [attempts, setAttempts] = useState<AttemptsState | null>(null);
+  const [syncedAttemptsScope, setSyncedAttemptsScope] = useState<string | null>(
+    null,
+  );
+  const [completionEndedScope, setCompletionEndedScope] = useState<
+    string | null
+  >(null);
+  const [scrollTarget, setScrollTarget] = useState<number | null>(null);
 
   const hasFinalAssessment = useMemo(
     () => courseHasQuizResultsPage(lessons),
@@ -141,31 +165,60 @@ export function CoursePlayerWebsite({
     (!hasFinalAssessment ||
       (finalQuizSnapshot !== null && finalQuizSnapshot.passed));
 
+  if (syncedAttemptsScope !== attemptsScope) {
+    setSyncedAttemptsScope(attemptsScope);
+    setCompletionEndedScope(null);
+    const existing = readAttemptsState(courseId);
+    if (isCourseLocked(existing, attemptsLimit)) {
+      setAttempts(existing);
+    } else {
+      setAttempts(beginAttempt(courseId, attemptsLimit).state);
+    }
+  }
+
+  if (
+    courseComplete &&
+    attempts?.active &&
+    completionEndedScope !== attemptsScope
+  ) {
+    setCompletionEndedScope(attemptsScope);
+    setAttempts(endAttempt(courseId));
+  }
+
+  const progressRestoringRef = useRef(true);
+
+  useEffect(() => {
+    progressRestoringRef.current = true;
+    if (!flatIdsKey) {
+      progressRestoringRef.current = false;
+      return;
+    }
+    const ids = flatIdsKey.split("|").filter(Boolean);
+    if (ids.length === 0) {
+      progressRestoringRef.current = false;
+      return;
+    }
+
+    queueMicrotask(() => {
+      const stored = readPlayProgress(courseId, ids);
+      let idx = Math.min(stored.pageIndex, Math.max(0, ids.length - 1));
+      if (resumeFromUrl !== null) {
+        idx = Math.min(resumeFromUrl, Math.max(0, ids.length - 1));
+      }
+      setVisited(new Set(stored.visitedPageIds));
+      setActiveFlatIndex(idx);
+      setScrollTarget(idx);
+      progressRestoringRef.current = false;
+    });
+  }, [courseId, flatIdsKey, resumeFromUrl]);
+
   useEffect(() => {
     function refresh() {
       setFinalQuizSnapshot(readFinalQuizResult(courseId));
     }
-    refresh();
     window.addEventListener("cbl-final-quiz-updated", refresh);
     return () => window.removeEventListener("cbl-final-quiz-updated", refresh);
   }, [courseId]);
-
-  useEffect(() => {
-    const existing = readAttemptsState(courseId);
-    if (isCourseLocked(existing, attemptsLimit)) {
-      setAttempts(existing);
-      return;
-    }
-    const { state } = beginAttempt(courseId, attemptsLimit);
-    setAttempts(state);
-  }, [courseId, attemptsLimit]);
-
-  useEffect(() => {
-    if (!courseComplete) return;
-    if (!attempts?.active) return;
-    const next = endAttempt(courseId);
-    setAttempts(next);
-  }, [courseComplete, courseId, attempts?.active]);
 
   const runScrollSync = useCallback(() => {
     const root = scrollRootRef.current;
@@ -197,19 +250,14 @@ export function CoursePlayerWebsite({
   }, [flat, total, courseComplete]);
 
   const runScrollSyncRef = useRef(runScrollSync);
-  runScrollSyncRef.current = runScrollSync;
 
   useLayoutEffect(() => {
-    if (!flatIdsKey) return;
-    const ids = flatIdsKey.split("|").filter(Boolean);
-    if (ids.length === 0) return;
-    const stored = readPlayProgress(courseId, ids);
-    setVisited(new Set(stored.visitedPageIds));
-    let idx = Math.min(stored.pageIndex, Math.max(0, ids.length - 1));
-    if (resumeFromUrl !== null) {
-      idx = Math.min(resumeFromUrl, Math.max(0, ids.length - 1));
-    }
-    setActiveFlatIndex(idx);
+    runScrollSyncRef.current = runScrollSync;
+  });
+
+  useLayoutEffect(() => {
+    if (scrollTarget === null) return;
+    const idx = scrollTarget;
     requestAnimationFrame(() => {
       document
         .getElementById(`cbl-section-${idx}`)
@@ -218,7 +266,7 @@ export function CoursePlayerWebsite({
         runScrollSyncRef.current();
       });
     });
-  }, [courseId, flatIdsKey, resumeFromUrl]);
+  }, [scrollTarget]);
 
   useEffect(() => {
     const root = scrollRootRef.current;
@@ -262,7 +310,7 @@ export function CoursePlayerWebsite({
   }, [activeFlatIndex, visited]);
 
   useEffect(() => {
-    if (!flatIdsKey) return;
+    if (!flatIdsKey || progressRestoringRef.current) return;
     writePlayProgress(courseId, {
       pageIndex: activeFlatIndex,
       visitedPageIds: [...visited],
@@ -319,6 +367,8 @@ export function CoursePlayerWebsite({
     [flatIndexByPageId, scrollToSection],
   );
 
+  const resolvedLaunchHref = launchHref ?? `/courses/${courseId}/play`;
+
   if (total === 0) {
     return (
       <div className="mx-auto max-w-2xl bg-white px-4 py-16 text-center">
@@ -326,12 +376,14 @@ export function CoursePlayerWebsite({
           This manual has no topics yet. Add sections and topics in the builder
           to preview them here.
         </p>
-        <Link
-          href={`/courses/${courseId}/builder`}
-          className="mt-6 inline-block text-sm font-medium text-zinc-900 underline"
-        >
-          Open page builder
-        </Link>
+        {hideAuthorLinks ? null : (
+          <Link
+            href={`/courses/${courseId}/builder`}
+            className="mt-6 inline-block text-sm font-medium text-zinc-900 underline"
+          >
+            Open page builder
+          </Link>
+        )}
       </div>
     );
   }
@@ -344,6 +396,8 @@ export function CoursePlayerWebsite({
         attemptsLimit={attemptsLimit}
         attemptsUsed={attempts.used}
         themeColors={themeColors}
+        launchHref={resolvedLaunchHref}
+        hideAuthorLinks={hideAuthorLinks}
       />
     );
   }
@@ -446,6 +500,14 @@ export function CoursePlayerWebsite({
                     .map((p) => p.id)
                 : [];
               const isLastLessonInCourse = item.lessonIndex === lessons.length - 1;
+              const knowledgeCheckFeedback = isKnowledgeCheckQuestionPage(
+                lessons,
+                item.page.id,
+              );
+              const pageAudioSrc = resolvePageAudioSrc(
+                item.page.content,
+                signedImageUrls,
+              );
 
               return (
                 <section
@@ -455,45 +517,58 @@ export function CoursePlayerWebsite({
                   data-flat-index={i}
                   className="scroll-mt-24 border-b border-zinc-100 pb-16 last:border-b-0 dark:border-zinc-800"
                 >
-                  <header className="mb-6">
-                    <h1
-                      className="font-bold tracking-tight text-zinc-900 dark:text-zinc-50"
+                  <PageAudioHost
+                    src={pageAudioSrc}
+                    pageKey={item.page.id}
+                    playWhenVisible
+                    transcript={getPageAudioTranscript(item.page.content)}
+                    pageTitle={item.page.title}
+                    highlightColor={themeColors.highlight}
+                  >
+                    <header className="mb-6">
+                      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                        <h1
+                          className="min-w-0 flex-1 font-bold tracking-tight text-zinc-900 dark:text-zinc-50"
+                          style={{
+                            fontFamily: themeFonts.pageTitle,
+                            fontSize: themeFonts.pageTitleSize,
+                          }}
+                        >
+                          {item.page.title}
+                        </h1>
+                        <PageAudioControls />
+                      </div>
+                      <div
+                        className="mt-3 h-1 w-16 rounded-full"
+                        style={{ backgroundColor: themeColors.highlight }}
+                        aria-hidden
+                      />
+                    </header>
+                    <div
                       style={{
-                        fontFamily: themeFonts.pageTitle,
-                        fontSize: themeFonts.pageTitleSize,
+                        fontFamily: themeFonts.pageContent,
+                        fontSize: themeFonts.pageContentSize,
                       }}
                     >
-                      {item.page.title}
-                    </h1>
-                    <div
-                      className="mt-3 h-1 w-16 rounded-full"
-                      style={{ backgroundColor: themeColors.highlight }}
-                      aria-hidden
-                    />
-                  </header>
-                  <div
-                    style={{
-                      fontFamily: themeFonts.pageContent,
-                      fontSize: themeFonts.pageContentSize,
-                    }}
-                  >
-                    <TemplateRenderer
-                      content={item.page.content}
-                      signedImageUrls={signedImageUrls}
-                      courseId={courseId}
-                      pageId={item.page.id}
-                      passingScorePercent={passingScorePercent}
-                      lessonAssessmentPageIds={lessonAssessmentPageIds}
-                      isLastLessonInCourse={isLastLessonInCourse}
-                      assessmentAttemptsLimit={assessmentAttemptsLimit}
-                      courseTitle={courseTitle}
-                      learnerName={learnerName}
-                      courseComplete={courseComplete}
-                      hasFinalAssessment={hasFinalAssessment}
-                      themeColors={themeColors}
-                      onNavigateToPageId={navigateToPageId}
-                    />
-                  </div>
+                      <TemplateRenderer
+                        content={item.page.content}
+                        signedImageUrls={signedImageUrls}
+                        courseId={courseId}
+                        pageId={item.page.id}
+                        passingScorePercent={passingScorePercent}
+                        lessonAssessmentPageIds={lessonAssessmentPageIds}
+                        isLastLessonInCourse={isLastLessonInCourse}
+                        knowledgeCheckFeedback={knowledgeCheckFeedback}
+                        assessmentAttemptsLimit={assessmentAttemptsLimit}
+                        courseTitle={courseTitle}
+                        learnerName={learnerName}
+                        courseComplete={courseComplete}
+                        hasFinalAssessment={hasFinalAssessment}
+                        themeColors={themeColors}
+                        onNavigateToPageId={navigateToPageId}
+                      />
+                    </div>
+                  </PageAudioHost>
                 </section>
               );
             })}
@@ -501,24 +576,28 @@ export function CoursePlayerWebsite({
             <div className="flex flex-wrap gap-4 border-t border-zinc-200 pt-8 text-sm text-zinc-600">
               {!(attemptsLimit === 1 && courseComplete) ? (
                 <Link
-                  href={`/courses/${courseId}/play`}
+                  href={resolvedLaunchHref}
                   className="hover:text-zinc-900"
                 >
                   Manual home
                 </Link>
               ) : null}
-              <Link
-                href={`/courses/${courseId}`}
-                className="hover:text-zinc-900"
-              >
-                Settings
-              </Link>
-              <Link
-                href={`/courses/${courseId}/builder`}
-                className="hover:text-zinc-900"
-              >
-                Builder
-              </Link>
+              {hideAuthorLinks ? null : (
+                <>
+                  <Link
+                    href={`/courses/${courseId}`}
+                    className="hover:text-zinc-900"
+                  >
+                    Settings
+                  </Link>
+                  <Link
+                    href={`/courses/${courseId}/builder`}
+                    className="hover:text-zinc-900"
+                  >
+                    Builder
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>

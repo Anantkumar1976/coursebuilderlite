@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { acceptTeamInvite } from "@/lib/actions/team";
 import {
@@ -20,44 +20,80 @@ export type SignupTeamInvite = {
   subscription_id: string;
 };
 
+type SignupFormState = {
+  plan: PaypalPlanKey;
+  paypalApproved: boolean;
+  subscriptionId: string | null;
+  info: string | null;
+};
+
+function readSignupFormState(invite?: SignupTeamInvite | null): SignupFormState {
+  if (invite) {
+    return {
+      plan: "starter",
+      paypalApproved: false,
+      subscriptionId: null,
+      info: null,
+    };
+  }
+  if (typeof window === "undefined") {
+    return {
+      plan: "starter",
+      paypalApproved: false,
+      subscriptionId: null,
+      info: null,
+    };
+  }
+  const params = new URLSearchParams(window.location.search);
+  const selectedPlan = params.get("plan");
+  const paypalState = params.get("paypal");
+  const paypalSubscriptionId = params.get("subscription_id");
+  let plan: PaypalPlanKey = "starter";
+  if (selectedPlan && Object.hasOwn(PAYPAL_PLAN_CONFIG, selectedPlan)) {
+    plan = selectedPlan as PaypalPlanKey;
+  }
+  if (paypalState === "approved" && paypalSubscriptionId) {
+    return {
+      plan,
+      paypalApproved: true,
+      subscriptionId: paypalSubscriptionId,
+      info: "PayPal subscription approved. Complete account creation below to activate access.",
+    };
+  }
+  if (paypalState === "cancelled") {
+    return {
+      plan,
+      paypalApproved: false,
+      subscriptionId: null,
+      info: "PayPal checkout was cancelled. You can try again anytime.",
+    };
+  }
+  return {
+    plan,
+    paypalApproved: false,
+    subscriptionId: null,
+    info: null,
+  };
+}
+
 export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [info, setInfo] = useState<string | null>(null);
-  const [plan, setPlan] = useState<PaypalPlanKey>("starter");
+  const [info, setInfo] = useState<string | null>(() => readSignupFormState(invite).info);
+  const [accountCreated, setAccountCreated] = useState(false);
+  const [plan, setPlan] = useState<PaypalPlanKey>(() => readSignupFormState(invite).plan);
   const invitePlanConfig =
     invite && Object.hasOwn(PAYPAL_PLAN_CONFIG, invite.plan_key)
       ? PAYPAL_PLAN_CONFIG[invite.plan_key as PaypalPlanKey]
       : null;
   const [paypalPending, setPaypalPending] = useState(false);
-  const [paypalApproved, setPaypalApproved] = useState(false);
-  const [subscriptionId, setSubscriptionId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (invite) return;
-    if (typeof window === "undefined") {
-      return;
-    }
-    const params = new URLSearchParams(window.location.search);
-    const selectedPlan = params.get("plan");
-    const paypalState = params.get("paypal");
-    const paypalSubscriptionId = params.get("subscription_id");
-    if (selectedPlan && Object.hasOwn(PAYPAL_PLAN_CONFIG, selectedPlan)) {
-      setPlan(selectedPlan as PaypalPlanKey);
-    }
-    if (paypalState === "approved" && paypalSubscriptionId) {
-      setPaypalApproved(true);
-      setSubscriptionId(paypalSubscriptionId);
-      setInfo(
-        "PayPal subscription approved. Complete account creation below to activate access.",
-      );
-      return;
-    }
-    if (paypalState === "cancelled") {
-      setInfo("PayPal checkout was cancelled. You can try again anytime.");
-    }
-  }, [invite]);
+  const [paypalApproved, setPaypalApproved] = useState(
+    () => readSignupFormState(invite).paypalApproved,
+  );
+  const [subscriptionId, setSubscriptionId] = useState<string | null>(
+    () => readSignupFormState(invite).subscriptionId,
+  );
 
   async function handlePaypalSubscribe() {
     setError(null);
@@ -89,7 +125,9 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (accountCreated) return;
     setError(null);
+    setInfo(null);
     if (!invite && (!paypalApproved || !subscriptionId)) {
       setError("Please approve your PayPal subscription before creating an account.");
       return;
@@ -182,6 +220,7 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
       router.refresh();
       return;
     }
+    setAccountCreated(true);
     setInfo(
       "Check your email to confirm your account, then sign in. (You can disable email confirmation in Supabase Auth settings for local development.)",
     );
@@ -210,6 +249,7 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
               id="plan"
               name="plan"
               value={plan}
+              disabled={accountCreated}
               onChange={(event) => {
                 setPlan(event.target.value as PaypalPlanKey);
                 setPaypalApproved(false);
@@ -227,7 +267,7 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
           </div>
           <button
             type="button"
-            disabled={paypalPending}
+            disabled={paypalPending || accountCreated}
             onClick={handlePaypalSubscribe}
             className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-300 bg-white px-4 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:hover:bg-zinc-900"
           >
@@ -258,7 +298,7 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
           type="email"
           autoComplete="email"
           required
-          readOnly={Boolean(invite)}
+          readOnly={Boolean(invite) || accountCreated}
           defaultValue={invite?.email_normalized ?? undefined}
           className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-zinc-400 placeholder:text-zinc-400 focus:ring-2 read-only:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:read-only:bg-zinc-900"
         />
@@ -277,6 +317,7 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
           autoComplete="new-password"
           required
           minLength={8}
+          readOnly={accountCreated}
           className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-zinc-400 placeholder:text-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
         />
       </div>
@@ -294,6 +335,7 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
           autoComplete="new-password"
           required
           minLength={8}
+          readOnly={accountCreated}
           className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-zinc-400 placeholder:text-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
         />
       </div>
@@ -309,10 +351,10 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
       ) : null}
       <button
         type="submit"
-        disabled={pending || (!invite && !paypalApproved)}
+        disabled={pending || accountCreated || (!invite && !paypalApproved)}
         className="inline-flex h-10 items-center justify-center rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
       >
-        {pending ? "Creating account…" : "Create account"}
+        {pending ? "Creating account…" : accountCreated ? "Account created" : "Create account"}
       </button>
       <p className="text-center text-sm text-zinc-600 dark:text-zinc-400">
         Already have an account?{" "}

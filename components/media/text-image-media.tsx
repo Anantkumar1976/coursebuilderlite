@@ -15,6 +15,8 @@ export type CourseAssetLite = {
   storage_path: string;
 };
 
+export type AssetsUpdatedHandler = (added?: CourseAssetLite) => void;
+
 export function isCourseImageAsset(a: CourseAssetLite): boolean {
   const mime = a.mime_type?.toLowerCase() ?? "";
   if (mime.startsWith("image/")) return true;
@@ -34,7 +36,7 @@ type Props = {
   content: TextImage;
   onChange: (next: TextImage) => void;
   courseAssets: CourseAssetLite[];
-  onAssetsUpdated: () => void;
+  onAssetsUpdated: AssetsUpdatedHandler;
 };
 
 /** Image upload / URL / alt — used for Text + Image template and per block in multi-block layouts. */
@@ -50,7 +52,7 @@ export function TextImageImagePanel({
   value: TextImageImageValue;
   onChange: (next: TextImageImageValue) => void;
   courseAssets: CourseAssetLite[];
-  onAssetsUpdated: () => void;
+  onAssetsUpdated: AssetsUpdatedHandler;
   /** Unique prefix for form ids when multiple panels on the page. */
   idPrefix?: string;
 }) {
@@ -203,7 +205,14 @@ export function TextImageImagePanel({
           imageAssetId: assetId,
           imageUrl: "",
         });
-        onAssetsUpdated();
+        onAssetsUpdated({
+          id: assetId,
+          bucket: "assets",
+          storage_path: storagePath,
+          filename: file.name,
+          mime_type: file.type || null,
+          bytes: file.size,
+        });
       } catch {
         if (uploadObjectUrlRef.current) {
           URL.revokeObjectURL(uploadObjectUrlRef.current);
@@ -354,14 +363,14 @@ function CourseImageLibraryModal({
   selectedId,
   onPick,
 }: LibraryModalProps) {
+  const assetKey = open ? assets.map((asset) => asset.id).join(",") : "";
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(false);
+  const loading = open && loadedFor !== assetKey;
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !assetKey) return;
     let cancelled = false;
-    setLoading(true);
-    setThumbs({});
     (async () => {
       const supabase = createClient();
       const entries = await Promise.all(
@@ -378,12 +387,12 @@ function CourseImageLibraryModal({
         if (url) next[id] = url;
       }
       setThumbs(next);
-      setLoading(false);
+      setLoadedFor(assetKey);
     })();
     return () => {
       cancelled = true;
     };
-  }, [open, assets]);
+  }, [open, assetKey, assets]);
 
   useEffect(() => {
     if (!open) return;

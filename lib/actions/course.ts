@@ -7,12 +7,15 @@ import {
   BillingEnforcementError,
   ensureAuthorSeatAvailable,
 } from "@/lib/billing/enforcement";
+import { isMasterAdminUser } from "@/lib/auth/admin";
 import { parseAttemptsLimit } from "@/lib/course-player/attempts";
 import {
   parseNavigationFlow,
   type NavigationFlow,
 } from "@/lib/course-player/navigation-flow";
+import { createAdminClient, hasAdminSupabaseEnv } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { getSubscriptionIdFromUser } from "@/lib/workspace/access";
 
 function isMissingColumnMessage(message: string, column: string): boolean {
   const m = message.toLowerCase();
@@ -51,9 +54,32 @@ export async function createCourse(formData: FormData) {
     redirect("/courses/new?error=billing-check-failed");
   }
 
+  if (isMasterAdminUser(user)) {
+    if (!hasAdminSupabaseEnv()) {
+      redirect("/courses/new?error=admin-config");
+    }
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("courses")
+      .insert({ user_id: user.id, subscription_id: null, title })
+      .select("id")
+      .single();
+    if (error) {
+      console.error(error);
+      redirect("/courses/new?error=create-failed");
+    }
+    revalidatePath("/courses");
+    redirect(`/courses/${data.id}`);
+  }
+
+  const subscriptionId = getSubscriptionIdFromUser(user);
+  if (!subscriptionId) {
+    redirect("/courses/new?error=no-subscription");
+  }
+
   const { data, error } = await supabase
     .from("courses")
-    .insert({ user_id: user.id, title })
+    .insert({ user_id: user.id, subscription_id: subscriptionId, title })
     .select("id")
     .single();
 
@@ -117,6 +143,11 @@ export async function updateCourseSettings(courseId: string, formData: FormData)
       ? parseAttemptsLimit(formData.get("assessment_attempts_limit"))
       : null;
 
+  // is_featured is admin-only; parse (tri-state so we can skip it for non-admins).
+  const featuredRaw = formData.get("is_featured");
+  const isFeaturedRequested =
+    typeof featuredRaw === "string" ? featuredRaw === "on" : null;
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -124,6 +155,7 @@ export async function updateCourseSettings(courseId: string, formData: FormData)
   if (!user) {
     redirect("/login");
   }
+  const canToggleFeatured = isMasterAdminUser(user);
 
   const corePayload = {
     title,
@@ -138,7 +170,6 @@ export async function updateCourseSettings(courseId: string, formData: FormData)
     .from("courses")
     .update(corePayload)
     .eq("id", courseId)
-    .eq("user_id", user.id)
     .select("id")
     .maybeSingle();
 
@@ -164,15 +195,19 @@ export async function updateCourseSettings(courseId: string, formData: FormData)
     navigation_flow?: NavigationFlow;
     attempts_limit?: number | null;
     assessment_attempts_limit?: number | null;
+    is_featured?: boolean;
   };
 
-  let playerPayload: PlayerPayload = {
+  const playerPayload: PlayerPayload = {
     navigation_flow: navigationFlow,
     attempts_limit: attemptsLimit,
     assessment_attempts_limit: assessmentAttemptsLimit,
   };
+  if (canToggleFeatured && isFeaturedRequested !== null) {
+    playerPayload.is_featured = isFeaturedRequested;
+  }
 
-  const maxStripAttempts = 6;
+  const maxStripAttempts = 8;
   for (let i = 0; i < maxStripAttempts; i += 1) {
     if (Object.keys(playerPayload).length === 0) break;
 
@@ -180,7 +215,6 @@ export async function updateCourseSettings(courseId: string, formData: FormData)
       .from("courses")
       .update(playerPayload)
       .eq("id", courseId)
-      .eq("user_id", user.id)
       .select("id")
       .maybeSingle();
 
@@ -212,6 +246,10 @@ export async function updateCourseSettings(courseId: string, formData: FormData)
       }
       if (isMissingColumnMessage(msg, "navigation_flow")) {
         delete playerPayload.navigation_flow;
+        continue;
+      }
+      if (isMissingColumnMessage(msg, "is_featured")) {
+        delete playerPayload.is_featured;
         continue;
       }
 

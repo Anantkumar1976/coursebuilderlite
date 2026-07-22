@@ -52,7 +52,9 @@ function writeAttemptsState(courseId: string, state: AttemptsState): void {
       attemptsStorageKey(courseId),
       JSON.stringify({ used: Math.max(0, state.used), active: !!state.active }),
     );
-    window.dispatchEvent(new Event("cbl-attempts-updated"));
+    queueMicrotask(() => {
+      window.dispatchEvent(new Event("cbl-attempts-updated"));
+    });
   } catch {
     /* ignore */
   }

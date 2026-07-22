@@ -79,6 +79,8 @@ export default async function CourseBuilderPage({
         <div className="flex flex-wrap items-center gap-4">
           <Link
             href={`/courses/${courseId}/play`}
+            target="_blank"
+            rel="noopener noreferrer"
             className="text-sm font-medium text-zinc-900 underline-offset-4 hover:underline dark:text-zinc-50"
           >
             Preview

@@ -7,8 +7,32 @@ export {
   TEMPLATE_LABELS,
 } from "./defaults";
 export { parsePageContent } from "./parse";
+export {
+  getPageAudioTranscript,
+  hasPageAudio,
+  hasPageAudioTranscript,
+  resolvePageAudioSrc,
+  resolvePageAudioSrcForExport,
+} from "./page-audio";
+export {
+  CLICK_REVEAL_MAX_CARDS,
+  CLICK_REVEAL_MIN_CARDS,
+  clickRevealContainerClass,
+  clickRevealGridClass,
+  clickRevealItemClass,
+  emptyClickRevealItem,
+  normalizeClickRevealItems,
+  resolveClickRevealAudioSrc,
+  scormClickRevealGridClass,
+} from "./click-reveal";
+export {
+  emptyQuestionFeedbackFields,
+  hasQuestionFeedback,
+  resolveQuestionFeedbackAudioSrc,
+} from "./question-feedback";
 export type {
   AccordionItem,
+  ClickRevealItem,
   EmbedPdfContent,
   ImageCarouselCaptionMode,
   ImageCarouselItem,
@@ -17,6 +41,8 @@ export type {
   ImageGridLayout,
   ImageGridRowMode,
   PageContentV1,
+  PageAudioFields,
+  QuestionFeedbackFields,
   TabLayout,
   TabItem,
   TemplateId,

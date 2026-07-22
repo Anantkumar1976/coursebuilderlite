@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 const INQUIRY_TYPES = new Set([
   "sales",
   "licensing",
+  "custom_lms",
   "feature_request",
   "bug_report",
   "other",

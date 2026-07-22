@@ -10,6 +10,7 @@ export const TEMPLATE_IDS = [
   "image_grid",
   "tabs",
   "accordion",
+  "click_reveal",
   "course_completion",
   "mcq",
   "mrq",
@@ -83,6 +84,26 @@ export type AccordionItem = {
   title: string;
   body: RichBodyHtmlString;
 };
+
+export type ClickRevealItem = {
+  id: string;
+  /** Front of card — optional short label. */
+  cardTitle: string;
+  /** Front of card — optional teaser (rich text). */
+  cardBody: RichBodyHtmlString;
+  cardImageAssetId?: string | null;
+  cardImageUrl: string;
+  cardImageAlt: string;
+  /** Pop-up heading (falls back to card title in the player). */
+  revealTitle: string;
+  /** Pop-up body (rich text). */
+  revealBody: RichBodyHtmlString;
+  revealImageAssetId?: string | null;
+  revealImageUrl: string;
+  revealImageAlt: string;
+  /** Optional narration played when the reveal pop-up opens. */
+  revealAudioAssetId?: string | null;
+};
 export type ImageGridItem = {
   id: string;
   title: string;
@@ -108,8 +129,23 @@ export type EmbedPdfContent = {
   pdfUrl: string;
 };
 
+/** Optional uploaded narration / instruction audio (all page templates). */
+export type PageAudioFields = {
+  pageAudioAssetId?: string | null;
+  /** Plain-text transcript shown in the player when learners tap Transcript. */
+  pageAudioTranscript?: string;
+};
+
+/** Optional feedback shown after submit on in-lesson knowledge checks (not final quiz). */
+export type QuestionFeedbackFields = {
+  correctFeedback?: RichBodyHtmlString;
+  incorrectFeedback?: RichBodyHtmlString;
+  correctFeedbackAudioAssetId?: string | null;
+  incorrectFeedbackAudioAssetId?: string | null;
+};
+
 /** Discriminated union for versioned page content (stored as JSONB). */
-export type PageContentV1 =
+export type PageContentV1Core =
   | { v: 1; template: "text"; body: RichBodyHtmlString }
   | {
       v: 1;
@@ -165,6 +201,12 @@ export type PageContentV1 =
   | { v: 1; template: "accordion"; items: AccordionItem[] }
   | {
       v: 1;
+      template: "click_reveal";
+      intro: RichBodyHtmlString;
+      cards: ClickRevealItem[];
+    }
+  | {
+      v: 1;
       template: "course_completion";
       summary: RichBodyHtmlString;
       logoAssetId?: string | null;
@@ -172,21 +214,26 @@ export type PageContentV1 =
       logoAlt: string;
       showPrintCertificate?: boolean;
     }
-  | {
+  | ({
       v: 1;
       template: "mcq";
       question: string;
       options: string[];
       correctIndex: number;
-    }
-  | {
+    } & QuestionFeedbackFields)
+  | ({
       v: 1;
       template: "mrq";
       question: string;
       options: string[];
       correctIndices: number[];
-    }
-  | { v: 1; template: "true_false"; question: string; correct: boolean }
+    } & QuestionFeedbackFields)
+  | ({
+      v: 1;
+      template: "true_false";
+      question: string;
+      correct: boolean;
+    } & QuestionFeedbackFields)
   | {
       v: 1;
       template: "final_quiz";
@@ -204,6 +251,8 @@ export type PageContentV1 =
       passMessage: RichBodyHtmlString;
       failMessage: RichBodyHtmlString;
     };
+
+export type PageContentV1 = PageContentV1Core & PageAudioFields;
 
 export function isTemplateId(value: unknown): value is TemplateId {
   return (

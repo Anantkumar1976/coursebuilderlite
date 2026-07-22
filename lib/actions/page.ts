@@ -11,6 +11,7 @@ import type {
 } from "@/lib/page-builder/types";
 import type { Json } from "@/lib/supabase/database.types";
 import { createClient } from "@/lib/supabase/server";
+import { canAccessCourse } from "@/lib/workspace/access";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -23,18 +24,11 @@ async function requireUser() {
   return { supabase, user };
 }
 
-async function assertCourseOwner(
+async function assertCourseAccess(
   supabase: Awaited<ReturnType<typeof createClient>>,
   courseId: string,
-  userId: string,
 ) {
-  const { data } = await supabase
-    .from("courses")
-    .select("id")
-    .eq("id", courseId)
-    .eq("user_id", userId)
-    .maybeSingle();
-  return !!data;
+  return canAccessCourse(supabase, courseId);
 }
 
 async function resolveLessonId(
@@ -90,8 +84,8 @@ export async function createPage(
   /** When `template` is `text_video`, starts with this layout (e.g. video only). */
   textVideoLayout?: TextVideoLayout,
 ) {
-  const { supabase, user } = await requireUser();
-  if (!(await assertCourseOwner(supabase, courseId, user.id))) {
+  const { supabase } = await requireUser();
+  if (!(await assertCourseAccess(supabase, courseId))) {
     return { error: "Course not found." as const };
   }
 
@@ -152,8 +146,8 @@ export async function savePage(
   pageId: string,
   payload: { title: string; content: PageContentV1 },
 ) {
-  const { supabase, user } = await requireUser();
-  if (!(await assertCourseOwner(supabase, courseId, user.id))) {
+  const { supabase } = await requireUser();
+  if (!(await assertCourseAccess(supabase, courseId))) {
     return { error: "Course not found." as const };
   }
 
@@ -182,8 +176,8 @@ export async function reorderPages(
   lessonId: string,
   orderedPageIds: string[],
 ) {
-  const { supabase, user } = await requireUser();
-  if (!(await assertCourseOwner(supabase, courseId, user.id))) {
+  const { supabase } = await requireUser();
+  if (!(await assertCourseAccess(supabase, courseId))) {
     return { error: "Course not found." as const };
   }
 
@@ -219,8 +213,8 @@ export async function reorderPages(
 }
 
 export async function deletePage(courseId: string, pageId: string) {
-  const { supabase, user } = await requireUser();
-  if (!(await assertCourseOwner(supabase, courseId, user.id))) {
+  const { supabase } = await requireUser();
+  if (!(await assertCourseAccess(supabase, courseId))) {
     return { error: "Course not found." as const };
   }
 

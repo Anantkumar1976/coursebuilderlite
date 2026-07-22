@@ -2,13 +2,14 @@
 
 import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 import { isMasterAdminUser } from "@/lib/auth/admin";
 import {
-  BillingEnforcementError,
   getPlanMetadataFromUser,
   syncAndValidateSubscriptionStatus,
 } from "@/lib/billing/enforcement";
+import { sendTeamInviteEmail } from "@/lib/email/team-invite-email";
 import { PAYPAL_PLAN_CONFIG, type PaypalPlanKey } from "@/lib/paypal/subscriptions";
 import { createAdminClient, hasAdminSupabaseEnv } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -109,6 +110,7 @@ export async function createTeamInvite(formData: FormData) {
   }
 
   const token = generateInviteToken();
+  const expiresAt = inviteExpiryIso();
   const { error } = await supabase.from("billing_team_invites").insert({
     subscription_id: metadata.subscriptionId,
     invited_by_user_id: user.id,
@@ -118,7 +120,7 @@ export async function createTeamInvite(formData: FormData) {
     plan_key: planKey,
     authors_limit: metadata.authorsLimit,
     monthly_exports_limit: metadata.monthlyExportsLimit,
-    expires_at: inviteExpiryIso(),
+    expires_at: expiresAt,
   });
   if (error) {
     if (error.code === "23505") {
@@ -126,7 +128,27 @@ export async function createTeamInvite(formData: FormData) {
     }
     throw new Error(error.message);
   }
+
+  const planLabel = PAYPAL_PLAN_CONFIG[planKey].label;
+  const emailResult = await sendTeamInviteEmail({
+    inviteeEmail: email,
+    inviterEmail: user.email ?? "",
+    planLabel,
+    token,
+    expiresAt,
+  });
+
   revalidatePath("/courses/team");
+
+  if (emailResult.ok) {
+    redirect("/courses/team?invite_sent=1&email_sent=1");
+  }
+  if (emailResult.skipped) {
+    redirect("/courses/team?invite_sent=1&email_skipped=1");
+  }
+  redirect(
+    `/courses/team?invite_sent=1&email_failed=1&email=${encodeURIComponent(emailRaw)}`,
+  );
 }
 
 export async function revokeTeamInvite(formData: FormData) {

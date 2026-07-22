@@ -22,6 +22,7 @@ import {
   templateDisplayLabel,
   type PageContentV1,
 } from "@/lib/page-builder";
+import { isKnowledgeCheckQuestionPage } from "@/lib/course-player/final-assessment-lesson";
 
 import { ContentEditor } from "./content-editor";
 
@@ -106,19 +107,44 @@ export function PageBuilder({
     [flatPages, selectedId],
   );
 
+  const showQuestionFeedbackEditor = useMemo(
+    () =>
+      selectedId
+        ? isKnowledgeCheckQuestionPage(orderedLessons, selectedId)
+        : false,
+    [orderedLessons, selectedId],
+  );
+
   useEffect(() => {
-    if (!selected) {
+    if (!selectedId) {
       setTitleDraft("");
       setContentDraft(null);
       return;
     }
-    setTitleDraft(selected.title);
-    setContentDraft(selected.content);
-  }, [selected]);
+    const page = flatPages.find((p) => p.id === selectedId);
+    if (!page) return;
+    setTitleDraft(page.title);
+    setContentDraft(page.content);
+    // Only re-load editor state when switching pages — not after router.refresh().
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: ignore flatPages updates for same page
+  }, [selectedId]);
 
   const refresh = useCallback(() => {
     router.refresh();
   }, [router]);
+
+  const handleAssetsUpdated = useCallback(
+    (added?: CourseAssetLite) => {
+      if (added) {
+        setAssets((prev) =>
+          prev.some((a) => a.id === added.id) ? prev : [added, ...prev],
+        );
+        return;
+      }
+      refresh();
+    },
+    [refresh],
+  );
 
   const toggleLessonExpanded = useCallback((lessonId: string) => {
     setExpandedLessonIds((prev) => {
@@ -502,14 +528,20 @@ export function PageBuilder({
             <ContentEditor
               key={selectedId}
               content={contentDraft}
-              onChange={setContentDraft}
+              onChange={(next) => {
+                setContentDraft((prev) => {
+                  if (!prev) return prev;
+                  return typeof next === "function" ? next(prev) : next;
+                });
+              }}
               courseId={courseId}
               courseAssets={assets}
               availablePages={flatPages.map((p) => ({
                 id: p.id,
                 title: p.title || "Untitled page",
               }))}
-              onAssetsUpdated={refresh}
+              onAssetsUpdated={handleAssetsUpdated}
+              showQuestionFeedbackEditor={showQuestionFeedbackEditor}
             />
           </div>
         ) : (

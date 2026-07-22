@@ -22,7 +22,58 @@ function baseUrl() {
   return "http://localhost:3000";
 }
 
-export default async function TeamPage() {
+function getInviteFeedback(params: {
+  invite_sent?: string;
+  email_sent?: string;
+  email_skipped?: string;
+  email_failed?: string;
+  email?: string;
+}) {
+  if (params.invite_sent !== "1") return null;
+  if (params.email_sent === "1") {
+    const target = params.email?.trim();
+    return {
+      tone: "success" as const,
+      message: target
+        ? `Invite created and email sent to ${target}.`
+        : "Invite created and email sent.",
+    };
+  }
+  if (params.email_skipped === "1") {
+    return {
+      tone: "warning" as const,
+      message:
+        "Invite created, but email is not configured (set RESEND_API_KEY). Copy a link from Pending invites below.",
+    };
+  }
+  if (params.email_failed === "1") {
+    const target = params.email?.trim();
+    return {
+      tone: "warning" as const,
+      message: target
+        ? `Invite created for ${target}, but the email could not be sent. Copy a link from Pending invites below.`
+        : "Invite created, but the email could not be sent. Copy a link from Pending invites below.",
+    };
+  }
+  return {
+    tone: "success" as const,
+    message: "Invite created.",
+  };
+}
+
+export default async function TeamPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    invite_sent?: string;
+    email_sent?: string;
+    email_skipped?: string;
+    email_failed?: string;
+    email?: string;
+  }>;
+}) {
+  const params = await searchParams;
+  const feedback = getInviteFeedback(params);
   const supabase = await createClient();
   const {
     data: { user },
@@ -106,16 +157,32 @@ export default async function TeamPage() {
       </Link>
       <h1 className="mt-6 text-2xl font-semibold tracking-tight">Team &amp; seats</h1>
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+        Courses live in one shared workspace for this subscription — removing a member frees their
+        seat but keeps their courses available to the team.
+      </p>
+      <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
         Subscription <span className="font-mono text-xs">{metadata.subscriptionId}</span> ·{" "}
         {used} / {metadata.authorsLimit} seats in use (including pending invites)
         {seatsRemaining > 0 ? ` · ${seatsRemaining} available` : " · none available"}
       </p>
+      {feedback ? (
+        <p
+          className={`mt-4 rounded-lg border px-3 py-2 text-sm ${
+            feedback.tone === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-100"
+              : "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
+          }`}
+          role="status"
+        >
+          {feedback.message}
+        </p>
+      ) : null}
 
       <section className="mt-10 rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900/40">
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Invite a teammate</h2>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          We&apos;ll email the flow next; for now copy the links after you create an invite (or share
-          the accept URL from your pending list once we add per-invite links below).
+          Enter their email to send an invite (or copy a link from Pending invites if email is not
+          configured yet).
         </p>
         <form action={createTeamInvite} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
@@ -139,15 +206,8 @@ export default async function TeamPage() {
           </button>
         </form>
         <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-          New users:{" "}
-          <span className="font-mono">
-            {baseUrl()}/signup?invite_token=…
-          </span>
-          <br />
-          Existing users (sign in first):{" "}
-          <span className="font-mono">
-            {baseUrl()}/team/accept/…
-          </span>
+          Backup links (if email delivery fails): new users use signup; existing users sign in first,
+          then accept.
         </p>
       </section>
 

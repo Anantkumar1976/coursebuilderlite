@@ -4,9 +4,12 @@ import { useCallback } from "react";
 
 import {
   TextImageImagePanel,
+  type AssetsUpdatedHandler,
   type CourseAssetLite,
 } from "@/components/media/text-image-media";
 import { PdfMediaPanel } from "@/components/media/pdf-media";
+import { PageAudioMediaPanel } from "@/components/media/page-audio-media";
+import { QuestionFeedbackEditor } from "@/components/media/question-feedback-editor";
 import { RichTextEditor } from "@/components/rich-text/rich-text-editor";
 import {
   IMAGE_CAROUSEL_CAPTION_MODE_LABELS,
@@ -19,8 +22,11 @@ import {
   TEXT_IMAGE_LAYOUT_LABELS,
   TEXT_VIDEO_LAYOUTS,
   TEXT_VIDEO_LAYOUT_LABELS,
-  blockCountForLayout,
+  CLICK_REVEAL_MAX_CARDS,
+  CLICK_REVEAL_MIN_CARDS,
+  emptyClickRevealItem,
   emptyTextImageBlock,
+  blockCountForLayout,
   isColumnsLayout,
   newBlockId,
   normalizeImageGridItems,
@@ -48,11 +54,15 @@ function labelClass() {
 
 type Props = {
   content: PageContentV1;
-  onChange: (next: PageContentV1) => void;
+  onChange: (
+    next: PageContentV1 | ((prev: PageContentV1) => PageContentV1),
+  ) => void;
   courseId: string;
   courseAssets: CourseAssetLite[];
   availablePages: { id: string; title: string }[];
-  onAssetsUpdated: () => void;
+  onAssetsUpdated: AssetsUpdatedHandler;
+  /** When true, show correct/incorrect feedback fields (in-lesson knowledge checks). */
+  showQuestionFeedbackEditor?: boolean;
 };
 
 export function ContentEditor({
@@ -62,7 +72,15 @@ export function ContentEditor({
   courseAssets,
   availablePages,
   onAssetsUpdated,
+  showQuestionFeedbackEditor = false,
 }: Props) {
+  const patchContent = useCallback(
+    (patch: Record<string, unknown>) => {
+      onChange((prev) => ({ ...prev, ...patch }) as PageContentV1);
+    },
+    [onChange],
+  );
+
   const template = content.template;
   const badge = templateDisplayLabel(content);
 
@@ -159,7 +177,7 @@ export function ContentEditor({
               aria-labelledby="body-text-label"
               minHeight="min-h-[200px]"
               value={content.body}
-              onChange={(html) => onChange({ ...content, body: html })}
+              onChange={(html) => patchContent({ body: html })}
             />
           </div>
         </div>
@@ -220,7 +238,7 @@ export function ContentEditor({
                           []),
                       ];
                       blocks[idx] = { ...block, ...v };
-                      onChange({ ...content, blocks });
+                      patchContent({ blocks });
                     }}
                     courseAssets={courseAssets}
                     onAssetsUpdated={onAssetsUpdated}
@@ -243,7 +261,7 @@ export function ContentEditor({
                               []),
                           ];
                           blocks[idx] = { ...block, body: html };
-                          onChange({ ...content, blocks });
+                          patchContent({ blocks });
                         }}
                       />
                     </div>
@@ -262,7 +280,7 @@ export function ContentEditor({
                   imageUrl: content.imageUrl,
                   imageAlt: content.imageAlt,
                 }}
-                onChange={(v) => onChange({ ...content, ...v })}
+                onChange={(v) => patchContent({ ...v })}
                 courseAssets={courseAssets}
                 onAssetsUpdated={onAssetsUpdated}
               />
@@ -276,7 +294,7 @@ export function ContentEditor({
                     minHeight="min-h-[160px]"
                     value={content.body}
                     onChange={(html) =>
-                      onChange({ ...content, body: html })
+                      patchContent({ body: html })
                     }
                   />
                 </div>
@@ -294,7 +312,7 @@ export function ContentEditor({
                     minHeight="min-h-[160px]"
                     value={content.body}
                     onChange={(html) =>
-                      onChange({ ...content, body: html })
+                      patchContent({ body: html })
                     }
                   />
                 </div>
@@ -307,7 +325,7 @@ export function ContentEditor({
                   imageUrl: content.imageUrl,
                   imageAlt: content.imageAlt,
                 }}
-                onChange={(v) => onChange({ ...content, ...v })}
+                onChange={(v) => patchContent({ ...v })}
                 courseAssets={courseAssets}
                 onAssetsUpdated={onAssetsUpdated}
               />
@@ -351,7 +369,7 @@ export function ContentEditor({
                   aria-labelledby="tv-body-label"
                   minHeight="min-h-[160px]"
                   value={content.body}
-                  onChange={(html) => onChange({ ...content, body: html })}
+                  onChange={(html) => patchContent({ body: html })}
                 />
               </div>
             </div>
@@ -367,7 +385,7 @@ export function ContentEditor({
               className={fieldClass()}
               value={content.videoUrl}
               onChange={(e) =>
-                onChange({ ...content, videoUrl: e.target.value })
+                patchContent({ videoUrl: e.target.value })
               }
               placeholder="https://youtube.com/... or hosted file"
             />
@@ -386,7 +404,7 @@ export function ContentEditor({
                 aria-labelledby="tc-left-label"
                 minHeight="min-h-[200px]"
                 value={content.left}
-                onChange={(html) => onChange({ ...content, left: html })}
+                onChange={(html) => patchContent({ left: html })}
               />
             </div>
           </div>
@@ -399,7 +417,7 @@ export function ContentEditor({
                 aria-labelledby="tc-right-label"
                 minHeight="min-h-[200px]"
                 value={content.right}
-                onChange={(html) => onChange({ ...content, right: html })}
+                onChange={(html) => patchContent({ right: html })}
               />
             </div>
           </div>
@@ -417,7 +435,7 @@ export function ContentEditor({
                 aria-labelledby="pdf-intro-label"
                 minHeight="min-h-[120px]"
                 value={content.intro}
-                onChange={(html) => onChange({ ...content, intro: html })}
+                onChange={(html) => patchContent({ intro: html })}
               />
             </div>
           </div>
@@ -429,7 +447,7 @@ export function ContentEditor({
           <PdfMediaPanel
             courseId={courseId}
             value={{ pdfAssetId: content.pdfAssetId, pdfUrl: content.pdfUrl }}
-            onChange={(v) => onChange({ ...content, ...v })}
+            onChange={(v) => patchContent({ ...v })}
             courseAssets={courseAssets}
             onAssetsUpdated={onAssetsUpdated}
             idPrefix="pdf"
@@ -448,7 +466,7 @@ export function ContentEditor({
                 aria-labelledby="ic-intro-label"
                 minHeight="min-h-[120px]"
                 value={content.intro}
-                onChange={(html) => onChange({ ...content, intro: html })}
+                onChange={(html) => patchContent({ intro: html })}
               />
             </div>
           </div>
@@ -493,7 +511,7 @@ export function ContentEditor({
                   onChange={(e) => {
                     const items = normalizeImageCarouselItems(content.items);
                     items[idx] = { ...item, title: e.target.value };
-                    onChange({ ...content, items });
+                    patchContent({ items });
                   }}
                   placeholder={`Slide ${idx + 1} title`}
                 />
@@ -503,7 +521,7 @@ export function ContentEditor({
                   onClick={() => {
                     if (content.items.length <= 1) return;
                     const items = content.items.filter((s) => s.id !== item.id);
-                    onChange({ ...content, items });
+                    patchContent({ items });
                   }}
                 >
                   Remove slide
@@ -521,7 +539,7 @@ export function ContentEditor({
                 onChange={(v) => {
                   const items = normalizeImageCarouselItems(content.items);
                   items[idx] = { ...item, ...v };
-                  onChange({ ...content, items });
+                  patchContent({ items });
                 }}
                 courseAssets={courseAssets}
                 onAssetsUpdated={onAssetsUpdated}
@@ -534,7 +552,7 @@ export function ContentEditor({
                 onChange={(e) => {
                   const items = normalizeImageCarouselItems(content.items);
                   items[idx] = { ...item, caption: e.target.value };
-                  onChange({ ...content, items });
+                  patchContent({ items });
                 }}
                 placeholder="Caption text"
               />
@@ -581,7 +599,7 @@ export function ContentEditor({
                 aria-labelledby="ig-intro-label"
                 minHeight="min-h-[120px]"
                 value={content.intro}
-                onChange={(html) => onChange({ ...content, intro: html })}
+                onChange={(html) => patchContent({ intro: html })}
               />
             </div>
           </div>
@@ -691,7 +709,7 @@ export function ContentEditor({
                         content.items,
                       );
                       items[idx] = { ...item, title: e.target.value };
-                      onChange({ ...content, items });
+                      patchContent({ items });
                     }}
                     placeholder={`Tile ${idx + 1} title`}
                     aria-label={`Tile ${idx + 1} title`}
@@ -711,7 +729,7 @@ export function ContentEditor({
                         content.items,
                       );
                       items[idx] = { ...item, ...v };
-                      onChange({ ...content, items });
+                      patchContent({ items });
                     }}
                     courseAssets={courseAssets}
                     onAssetsUpdated={onAssetsUpdated}
@@ -727,7 +745,7 @@ export function ContentEditor({
                         content.items,
                       );
                       items[idx] = { ...item, caption: e.target.value };
-                      onChange({ ...content, items });
+                      patchContent({ items });
                     }}
                     placeholder="Caption / supporting text"
                     aria-label={`Tile ${idx + 1} caption`}
@@ -760,7 +778,7 @@ export function ContentEditor({
                             externalUrl:
                               kind === "external" ? item.externalUrl : "",
                           };
-                          onChange({ ...content, items });
+                          patchContent({ items });
                         }}
                       >
                         <option value="none">No link</option>
@@ -788,7 +806,7 @@ export function ContentEditor({
                               ...item,
                               targetPageId: e.target.value || null,
                             };
-                            onChange({ ...content, items });
+                            patchContent({ items });
                           }}
                         >
                           <option value="">Select page</option>
@@ -821,7 +839,7 @@ export function ContentEditor({
                               ...item,
                               externalUrl: e.target.value,
                             };
-                            onChange({ ...content, items });
+                            patchContent({ items });
                           }}
                           placeholder="https://example.com"
                         />
@@ -872,7 +890,7 @@ export function ContentEditor({
                   onChange={(e) => {
                     const tabs = [...content.tabs];
                     tabs[idx] = { ...tab, label: e.target.value };
-                    onChange({ ...content, tabs });
+                    patchContent({ tabs });
                   }}
                   aria-label={`Tab ${idx + 1} label`}
                 />
@@ -882,7 +900,7 @@ export function ContentEditor({
                   onClick={() => {
                     if (content.tabs.length <= 1) return;
                     const tabs = content.tabs.filter((t) => t.id !== tab.id);
-                    onChange({ ...content, tabs });
+                    patchContent({ tabs });
                   }}
                 >
                   Remove tab
@@ -900,7 +918,7 @@ export function ContentEditor({
                   onChange={(v) => {
                     const tabs = [...content.tabs];
                     tabs[idx] = { ...tab, ...v };
-                    onChange({ ...content, tabs });
+                    patchContent({ tabs });
                   }}
                   courseAssets={courseAssets}
                   onAssetsUpdated={onAssetsUpdated}
@@ -913,7 +931,7 @@ export function ContentEditor({
                 onChange={(html) => {
                   const tabs = [...content.tabs];
                   tabs[idx] = { ...tab, body: html };
-                  onChange({ ...content, tabs });
+                  patchContent({ tabs });
                 }}
               />
             </div>
@@ -962,7 +980,7 @@ export function ContentEditor({
                   onChange={(e) => {
                     const items = [...content.items];
                     items[idx] = { ...item, title: e.target.value };
-                    onChange({ ...content, items });
+                    patchContent({ items });
                   }}
                   aria-label={`Section ${idx + 1} title`}
                 />
@@ -972,7 +990,7 @@ export function ContentEditor({
                   onClick={() => {
                     if (content.items.length <= 1) return;
                     const items = content.items.filter((i) => i.id !== item.id);
-                    onChange({ ...content, items });
+                    patchContent({ items });
                   }}
                 >
                   Remove
@@ -985,7 +1003,7 @@ export function ContentEditor({
                 onChange={(html) => {
                   const items = [...content.items];
                   items[idx] = { ...item, body: html };
-                  onChange({ ...content, items });
+                  patchContent({ items });
                 }}
               />
             </div>
@@ -1016,6 +1034,185 @@ export function ContentEditor({
         </div>
       ) : null}
 
+      {template === "click_reveal" ? (
+        <div className="space-y-4">
+          <div>
+            <p className={labelClass()} id="cr-intro-label">
+              Description / instructions
+            </p>
+            <div className="mt-1">
+              <RichTextEditor
+                aria-labelledby="cr-intro-label"
+                minHeight="min-h-[120px]"
+                value={content.intro}
+                onChange={(html) => patchContent({ intro: html })}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            Add 1–8 cards. Each card can show an image, text, or both on the
+            front. Set reveal content for the pop-up learners see when they
+            click a card.
+          </p>
+          {content.cards.map((card, idx) => (
+            <div
+              key={card.id}
+              className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-700"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                  Card {idx + 1}
+                </p>
+                <button
+                  type="button"
+                  className="text-xs text-red-600 hover:underline dark:text-red-400"
+                  onClick={() => {
+                    if (content.cards.length <= CLICK_REVEAL_MIN_CARDS) return;
+                    patchContent({
+                      cards: content.cards.filter((c) => c.id !== card.id),
+                    });
+                  }}
+                >
+                  Remove card
+                </button>
+              </div>
+              <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                <div className="space-y-3 rounded-md border border-zinc-100 p-3 dark:border-zinc-800">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    Card front
+                  </p>
+                  <input
+                    type="text"
+                    className={fieldClass()}
+                    value={card.cardTitle}
+                    onChange={(e) => {
+                      const cards = [...content.cards];
+                      cards[idx] = { ...card, cardTitle: e.target.value };
+                      patchContent({ cards });
+                    }}
+                    placeholder="Card title (optional)"
+                    aria-label={`Card ${idx + 1} title`}
+                  />
+                  <TextImageImagePanel
+                    courseId={courseId}
+                    idPrefix={`cr-card-${idx}`}
+                    value={{
+                      imageAssetId: card.cardImageAssetId,
+                      imageUrl: card.cardImageUrl,
+                      imageAlt: card.cardImageAlt,
+                    }}
+                    onChange={(v) => {
+                      const cards = [...content.cards];
+                      cards[idx] = {
+                        ...card,
+                        cardImageAssetId: v.imageAssetId,
+                        cardImageUrl: v.imageUrl,
+                        cardImageAlt: v.imageAlt,
+                      };
+                      patchContent({ cards });
+                    }}
+                    courseAssets={courseAssets}
+                    onAssetsUpdated={onAssetsUpdated}
+                  />
+                  <RichTextEditor
+                    aria-label={`Card ${idx + 1} teaser text`}
+                    minHeight="min-h-[100px]"
+                    value={card.cardBody}
+                    onChange={(html) => {
+                      const cards = [...content.cards];
+                      cards[idx] = { ...card, cardBody: html };
+                      patchContent({ cards });
+                    }}
+                  />
+                </div>
+                <div className="space-y-3 rounded-md border border-zinc-100 p-3 dark:border-zinc-800">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    Reveal pop-up
+                  </p>
+                  <input
+                    type="text"
+                    className={fieldClass()}
+                    value={card.revealTitle}
+                    onChange={(e) => {
+                      const cards = [...content.cards];
+                      cards[idx] = { ...card, revealTitle: e.target.value };
+                      patchContent({ cards });
+                    }}
+                    placeholder="Pop-up title (optional)"
+                    aria-label={`Card ${idx + 1} reveal title`}
+                  />
+                  <TextImageImagePanel
+                    courseId={courseId}
+                    idPrefix={`cr-reveal-${idx}`}
+                    value={{
+                      imageAssetId: card.revealImageAssetId,
+                      imageUrl: card.revealImageUrl,
+                      imageAlt: card.revealImageAlt,
+                    }}
+                    onChange={(v) => {
+                      const cards = [...content.cards];
+                      cards[idx] = {
+                        ...card,
+                        revealImageAssetId: v.imageAssetId,
+                        revealImageUrl: v.imageUrl,
+                        revealImageAlt: v.imageAlt,
+                      };
+                      patchContent({ cards });
+                    }}
+                    courseAssets={courseAssets}
+                    onAssetsUpdated={onAssetsUpdated}
+                  />
+                  <RichTextEditor
+                    aria-label={`Card ${idx + 1} reveal body`}
+                    minHeight="min-h-[140px]"
+                    value={card.revealBody}
+                    onChange={(html) => {
+                      const cards = [...content.cards];
+                      cards[idx] = { ...card, revealBody: html };
+                      patchContent({ cards });
+                    }}
+                  />
+                  <PageAudioMediaPanel
+                    courseId={courseId}
+                    showTranscript={false}
+                    description="Optional audio played automatically when this card's pop-up opens."
+                    value={{
+                      pageAudioAssetId: card.revealAudioAssetId ?? null,
+                    }}
+                    onChange={(v) => {
+                      const cards = [...content.cards];
+                      cards[idx] = {
+                        ...card,
+                        revealAudioAssetId: v.pageAudioAssetId ?? null,
+                      };
+                      patchContent({ cards });
+                    }}
+                    courseAssets={courseAssets}
+                    onAssetsUpdated={onAssetsUpdated}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="text-sm font-medium text-zinc-700 underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-300"
+            disabled={content.cards.length >= CLICK_REVEAL_MAX_CARDS}
+            onClick={() => {
+              if (content.cards.length >= CLICK_REVEAL_MAX_CARDS) return;
+              patchContent({
+                cards: [
+                  ...content.cards,
+                  emptyClickRevealItem(content.cards.length),
+                ],
+              });
+            }}
+          >
+            + Add card
+          </button>
+        </div>
+      ) : null}
+
       {template === "course_completion" ? (
         <div className="space-y-4">
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs leading-relaxed text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-200">
@@ -1032,7 +1229,7 @@ export function ContentEditor({
                 aria-labelledby="cc-summary-label"
                 minHeight="min-h-[180px]"
                 value={content.summary}
-                onChange={(html) => onChange({ ...content, summary: html })}
+                onChange={(html) => patchContent({ summary: html })}
               />
             </div>
           </div>
@@ -1072,7 +1269,7 @@ export function ContentEditor({
                 })
               }
             />
-            Enable "Print Certificate" button on the completion page
+            Enable &ldquo;Print Certificate&rdquo; button on the completion page
           </label>
         </div>
       ) : null}
@@ -1089,7 +1286,7 @@ export function ContentEditor({
               className={fieldClass()}
               value={content.question}
               onChange={(e) =>
-                onChange({ ...content, question: e.target.value })
+                patchContent({ question: e.target.value })
               }
             />
           </div>
@@ -1102,7 +1299,7 @@ export function ContentEditor({
                   name="mcq-correct"
                   className="mt-2"
                   checked={content.correctIndex === idx}
-                  onChange={() => onChange({ ...content, correctIndex: idx })}
+                  onChange={() => patchContent({ correctIndex: idx })}
                   aria-label={`Correct answer option ${idx + 1}`}
                 />
                 <input
@@ -1112,13 +1309,22 @@ export function ContentEditor({
                   onChange={(e) => {
                     const options = [...content.options];
                     options[idx] = e.target.value;
-                    onChange({ ...content, options });
+                    patchContent({ options });
                   }}
                   aria-label={`Option ${idx + 1}`}
                 />
               </li>
             ))}
           </ul>
+          {showQuestionFeedbackEditor ? (
+            <QuestionFeedbackEditor
+              courseId={courseId}
+              value={content}
+              onChange={(feedback) => patchContent(feedback)}
+              courseAssets={courseAssets}
+              onAssetsUpdated={onAssetsUpdated}
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -1134,7 +1340,7 @@ export function ContentEditor({
               className={fieldClass()}
               value={content.question}
               onChange={(e) =>
-                onChange({ ...content, question: e.target.value })
+                patchContent({ question: e.target.value })
               }
             />
           </div>
@@ -1166,7 +1372,7 @@ export function ContentEditor({
                     onChange={(e) => {
                       const options = [...content.options];
                       options[idx] = e.target.value;
-                      onChange({ ...content, options });
+                      patchContent({ options });
                     }}
                   />
                 </li>
@@ -1185,6 +1391,15 @@ export function ContentEditor({
           >
             + Add option
           </button>
+          {showQuestionFeedbackEditor ? (
+            <QuestionFeedbackEditor
+              courseId={courseId}
+              value={content}
+              onChange={(feedback) => patchContent(feedback)}
+              courseAssets={courseAssets}
+              onAssetsUpdated={onAssetsUpdated}
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -1200,7 +1415,7 @@ export function ContentEditor({
               className={fieldClass()}
               value={content.question}
               onChange={(e) =>
-                onChange({ ...content, question: e.target.value })
+                patchContent({ question: e.target.value })
               }
             />
           </div>
@@ -1212,7 +1427,7 @@ export function ContentEditor({
                   type="radio"
                   name="tf-correct"
                   checked={content.correct === true}
-                  onChange={() => onChange({ ...content, correct: true })}
+                  onChange={() => patchContent({ correct: true })}
                 />
                 True
               </label>
@@ -1221,12 +1436,21 @@ export function ContentEditor({
                   type="radio"
                   name="tf-correct"
                   checked={content.correct === false}
-                  onChange={() => onChange({ ...content, correct: false })}
+                  onChange={() => patchContent({ correct: false })}
                 />
                 False
               </label>
             </div>
           </fieldset>
+          {showQuestionFeedbackEditor ? (
+            <QuestionFeedbackEditor
+              courseId={courseId}
+              value={content}
+              onChange={(feedback) => patchContent(feedback)}
+              courseAssets={courseAssets}
+              onAssetsUpdated={onAssetsUpdated}
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -1241,7 +1465,7 @@ export function ContentEditor({
                 aria-labelledby="fq-intro-label"
                 minHeight="min-h-[220px]"
                 value={content.intro}
-                onChange={(html) => onChange({ ...content, intro: html })}
+                onChange={(html) => patchContent({ intro: html })}
               />
             </div>
             <div className="mt-3 space-y-2 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
@@ -1279,7 +1503,7 @@ export function ContentEditor({
                 aria-labelledby="qr-intro-label"
                 minHeight="min-h-[100px]"
                 value={content.intro}
-                onChange={(html) => onChange({ ...content, intro: html })}
+                onChange={(html) => patchContent({ intro: html })}
               />
             </div>
           </div>
@@ -1293,7 +1517,7 @@ export function ContentEditor({
                 minHeight="min-h-[120px]"
                 value={content.passMessage}
                 onChange={(html) =>
-                  onChange({ ...content, passMessage: html })
+                  patchContent({ passMessage: html })
                 }
               />
             </div>
@@ -1308,7 +1532,7 @@ export function ContentEditor({
                 minHeight="min-h-[120px]"
                 value={content.failMessage}
                 onChange={(html) =>
-                  onChange({ ...content, failMessage: html })
+                  patchContent({ failMessage: html })
                 }
               />
             </div>
@@ -1321,6 +1545,29 @@ export function ContentEditor({
           </p>
         </div>
       ) : null}
+
+      <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-700">
+        <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+          Page audio (optional)
+        </p>
+        <div className="mt-3">
+          <PageAudioMediaPanel
+            courseId={courseId}
+            value={{
+              pageAudioAssetId: content.pageAudioAssetId ?? null,
+              pageAudioTranscript: content.pageAudioTranscript ?? "",
+            }}
+            onChange={(v) =>
+              patchContent({
+                pageAudioAssetId: v.pageAudioAssetId ?? null,
+                pageAudioTranscript: v.pageAudioTranscript ?? "",
+              })
+            }
+            courseAssets={courseAssets}
+            onAssetsUpdated={onAssetsUpdated}
+          />
+        </div>
+      </div>
     </div>
   );
 }

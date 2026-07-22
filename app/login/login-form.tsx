@@ -70,12 +70,20 @@ export function LoginForm({ redirectNext }: { redirectNext?: string | null }) {
         />
       </div>
       <div className="flex flex-col gap-1.5">
-        <label
-          htmlFor="password"
-          className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
-        >
-          Password
-        </label>
+        <div className="flex items-center justify-between gap-2">
+          <label
+            htmlFor="password"
+            className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
+          >
+            Password
+          </label>
+          <Link
+            href="/forgot-password"
+            className="text-xs font-medium text-zinc-600 underline-offset-4 hover:underline dark:text-zinc-400"
+          >
+            Forgot password?
+          </Link>
+        </div>
         <input
           id="password"
           name="password"

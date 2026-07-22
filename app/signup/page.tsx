@@ -12,6 +12,10 @@ import { createClient } from "@/lib/supabase/server";
 
 import { SignupForm } from "./signup-form";
 
+function isTeamInviteExpired(expiresAt: string): boolean {
+  return new Date(expiresAt) < new Date();
+}
+
 export default async function SignupPage({
   searchParams,
 }: {
@@ -55,7 +59,7 @@ export default async function SignupPage({
         inviteError = "Invite not found.";
       } else if (inv.status !== "pending") {
         inviteError = "This invite is no longer valid.";
-      } else if (new Date(inv.expires_at).getTime() < Date.now()) {
+      } else if (isTeamInviteExpired(inv.expires_at)) {
         inviteError = "This invite has expired.";
       } else {
         invitePayload = {

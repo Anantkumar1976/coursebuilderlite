@@ -3,7 +3,7 @@ import JSZip from "jszip";
 
 import { collectImageAssetIdsFromPages } from "@/lib/assets/collect-image-asset-ids";
 import { extensionFromFilename } from "@/lib/assets/storage-path";
-import { parsePageContent } from "@/lib/page-builder";
+import { parsePageContent, resolvePageAudioSrcForExport } from "@/lib/page-builder";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
 import {
@@ -64,8 +64,11 @@ export async function buildScormZipBuffer(options: {
   const pageIndexById = Object.fromEntries(
     options.pages.map((row, idx) => [row.id, idx]),
   );
-  const parsed: { title: string; innerHtml: string }[] = options.pages.map(
-    (p) => {
+  const parsed: {
+    title: string;
+    innerHtml: string;
+    pageAudioSrc: string | null;
+  }[] = options.pages.map((p) => {
       const content = parsePageContent(p.content);
       return {
         title: p.title || "Untitled page",
@@ -73,9 +76,9 @@ export async function buildScormZipBuffer(options: {
           scormRelative,
           pageIndexById,
         }),
+        pageAudioSrc: resolvePageAudioSrcForExport(content, scormRelative),
       };
-    },
-  );
+    });
 
   const manifestSummary =
     options.manifestDescription?.trim() ||

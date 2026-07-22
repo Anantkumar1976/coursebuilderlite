@@ -66,7 +66,7 @@ export function CoursePlayerSidebar({
 }: Props) {
   const canGo = useMemo(() => {
     if (!canNavigateToIndex) {
-      return (_i: number) => true;
+      return () => true;
     }
     return canNavigateToIndex;
   }, [canNavigateToIndex]);

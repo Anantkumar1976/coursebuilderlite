@@ -19,6 +19,12 @@ type Props = {
   attemptsLimit: number | null;
   /** Website/manual presentation mode. */
   manualMode?: boolean;
+  /** Override the play content route (e.g. `/demo/{id}/play`). */
+  playHref?: string;
+  /** Override the settings-back route used when locked (e.g. `/demo/{id}`). */
+  settingsHref?: string;
+  /** Hide the author-only settings/builder links (used on public demo pages). */
+  hideAuthorLinks?: boolean;
 };
 
 export function CourseLaunch({
@@ -33,6 +39,9 @@ export function CourseLaunch({
   themeColorsJson,
   attemptsLimit,
   manualMode = false,
+  playHref,
+  settingsHref,
+  hideAuthorLinks = false,
 }: Props) {
   return (
     <div className="flex min-h-[calc(100vh-3.5rem)] flex-col">
@@ -111,21 +120,25 @@ export function CourseLaunch({
             themeColorsJson={themeColorsJson}
             attemptsLimit={attemptsLimit}
             manualMode={manualMode}
+            contentHref={playHref}
+            backHref={settingsHref}
           />
-          <div className="flex flex-wrap gap-4 text-sm">
-            <Link
-              href={`/courses/${courseId}`}
-              className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-            >
-              {manualMode ? "Manual settings" : "Course settings"}
-            </Link>
-            <Link
-              href={`/courses/${courseId}/builder`}
-              className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-            >
-              Builder
-            </Link>
-          </div>
+          {hideAuthorLinks ? null : (
+            <div className="flex flex-wrap gap-4 text-sm">
+              <Link
+                href={`/courses/${courseId}`}
+                className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+              >
+                {manualMode ? "Manual settings" : "Course settings"}
+              </Link>
+              <Link
+                href={`/courses/${courseId}/builder`}
+                className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+              >
+                Builder
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     </div>

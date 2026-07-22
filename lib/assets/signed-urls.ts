@@ -4,7 +4,7 @@ import type { Database } from "@/lib/supabase/database.types";
 
 const SIGNED_URL_TTL_SEC = 60 * 60;
 
-/** Signed GET URLs for preview (builder, player). RLS on `assets` limits rows to the current user. */
+/** Signed GET URLs for preview (builder, player). RLS on `assets` / storage limits access to the team workspace. */
 export async function getSignedUrlsForAssetIds(
   supabase: SupabaseClient<Database>,
   assetIds: string[],

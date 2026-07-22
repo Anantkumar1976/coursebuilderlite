@@ -15,6 +15,12 @@ function errorMessage(code: string | null) {
   if (code === "billing-check-failed") {
     return "Could not verify your subscription limits. Try again.";
   }
+  if (code === "no-subscription") {
+    return "Your account is not linked to a team subscription.";
+  }
+  if (code === "admin-config") {
+    return "Master admin course creation requires SUPABASE_SERVICE_ROLE_KEY on the server.";
+  }
   return null;
 }
 

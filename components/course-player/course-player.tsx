@@ -34,10 +34,13 @@ import {
   writePlayProgress,
 } from "@/lib/course-player/progress";
 import type { LessonNav, PlayerPage } from "@/lib/course-player/types";
+import { getPageAudioTranscript, resolvePageAudioSrc } from "@/lib/page-builder";
 
 import { CourseLocked } from "./course-locked";
 import { CoursePlayerSidebar } from "./course-player-sidebar";
 import { CoursePlayerWebsite } from "./course-player-website";
+import { PageAudioControls, PageAudioHost } from "./page-audio-host";
+import { isKnowledgeCheckQuestionPage } from "@/lib/course-player/final-assessment-lesson";
 import { TemplateRenderer } from "./template-renderer";
 
 export type { LessonNav, PlayerPage } from "@/lib/course-player/types";
@@ -68,9 +71,20 @@ type Props = {
   assessmentAttemptsLimit: number | null;
   learnerName: string;
   customCss?: string | null;
+  /** Override the "Course home" launch route (e.g. `/demo/{id}`). */
+  launchHref?: string;
+  /** Hide author-only UI (Settings, Builder) — used on public demo pages. */
+  hideAuthorLinks?: boolean;
 };
 
-export function CoursePlayer({
+export function CoursePlayer(props: Props) {
+  if (props.navigationFlow === "website") {
+    return <CoursePlayerWebsite {...props} />;
+  }
+  return <CoursePlayerStandard {...props} />;
+}
+
+function CoursePlayerStandard({
   courseId,
   courseTitle,
   bannerUrl,
@@ -86,28 +100,9 @@ export function CoursePlayer({
   assessmentAttemptsLimit,
   learnerName,
   customCss,
+  launchHref,
+  hideAuthorLinks = false,
 }: Props) {
-  if (navigationFlow === "website") {
-    return (
-      <CoursePlayerWebsite
-        courseId={courseId}
-        courseTitle={courseTitle}
-        bannerUrl={bannerUrl}
-        lessons={lessons}
-        referenceMaterials={referenceMaterials}
-        themeFonts={themeFonts}
-        themeColors={themeColors}
-        signedImageUrls={signedImageUrls}
-        resumeFromUrl={resumeFromUrl}
-        passingScorePercent={passingScorePercent}
-        attemptsLimit={attemptsLimit}
-        assessmentAttemptsLimit={assessmentAttemptsLimit}
-        learnerName={learnerName}
-        customCss={customCss}
-      />
-    );
-  }
-
   const flat = useMemo(() => {
     const out: {
       lessonIndex: number;
@@ -157,10 +152,24 @@ export function CoursePlayer({
   const [expandedLessonIds, setExpandedLessonIds] = useState<Set<string>>(
     () => new Set(lessons.map((l) => l.id)),
   );
-  const [finalQuizSnapshot, setFinalQuizSnapshot] = useState<
-    ReturnType<typeof readFinalQuizResult>
-  >(null);
+  const [finalQuizSnapshot, setFinalQuizSnapshot] = useState(() =>
+    readFinalQuizResult(courseId),
+  );
+  const [syncedFinalQuizCourseId, setSyncedFinalQuizCourseId] =
+    useState(courseId);
+  if (syncedFinalQuizCourseId !== courseId) {
+    setSyncedFinalQuizCourseId(courseId);
+    setFinalQuizSnapshot(readFinalQuizResult(courseId));
+  }
+
+  const attemptsScope = `${courseId}:${attemptsLimit ?? "none"}`;
   const [attempts, setAttempts] = useState<AttemptsState | null>(null);
+  const [syncedAttemptsScope, setSyncedAttemptsScope] = useState<string | null>(
+    null,
+  );
+  const [completionEndedScope, setCompletionEndedScope] = useState<
+    string | null
+  >(null);
   const [assessmentLockTick, setAssessmentLockTick] = useState(0);
 
   const clampedIndex = total === 0 ? 0 : Math.min(index, total - 1);
@@ -182,6 +191,14 @@ export function CoursePlayer({
     ? current.lessonIndex === lessons.length - 1
     : false;
 
+  const knowledgeCheckFeedback = useMemo(
+    () =>
+      current?.page.id
+        ? isKnowledgeCheckQuestionPage(lessons, current.page.id)
+        : false,
+    [current?.page.id, lessons],
+  );
+
   const hasFinalAssessment = useMemo(
     () => courseHasQuizResultsPage(lessons),
     [lessons],
@@ -189,6 +206,8 @@ export function CoursePlayer({
 
   const assessmentFullyLocked = useMemo(
     () => isFinalAssessmentLocked(courseId, assessmentAttemptsLimit),
+    // assessmentLockTick intentionally triggers re-read after attempt updates
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- version bump is the refresh signal
     [courseId, assessmentAttemptsLimit, assessmentLockTick],
   );
 
@@ -204,11 +223,76 @@ export function CoursePlayer({
     (!hasFinalAssessment ||
       (finalQuizSnapshot !== null && finalQuizSnapshot.passed));
 
+  if (syncedAttemptsScope !== attemptsScope) {
+    setSyncedAttemptsScope(attemptsScope);
+    setCompletionEndedScope(null);
+    const existing = readAttemptsState(courseId);
+    if (isCourseLocked(existing, attemptsLimit)) {
+      setAttempts(existing);
+    } else {
+      setAttempts(beginAttempt(courseId, attemptsLimit).state);
+    }
+  }
+
+  if (
+    courseComplete &&
+    attempts?.active &&
+    completionEndedScope !== attemptsScope
+  ) {
+    setCompletionEndedScope(attemptsScope);
+    setAttempts(endAttempt(courseId));
+  }
+
+  const progressRestoringRef = useRef(true);
+
+  useEffect(() => {
+    progressRestoringRef.current = true;
+    if (!flatIdsKey) {
+      progressRestoringRef.current = false;
+      return;
+    }
+    const ids = flatIdsKey.split("|").filter(Boolean);
+    if (ids.length === 0) {
+      progressRestoringRef.current = false;
+      return;
+    }
+
+    queueMicrotask(() => {
+      if (resumeFromUrl !== null) {
+        const nextIndex = Math.min(resumeFromUrl, Math.max(0, ids.length - 1));
+        setIndex(nextIndex);
+        const currentPageId = flat[nextIndex]?.page.id;
+        setVisited(currentPageId ? new Set([currentPageId]) : new Set());
+        progressRestoringRef.current = false;
+        return;
+      }
+
+      const stored = readPlayProgress(courseId, ids);
+      const nextVisited = new Set(stored.visitedPageIds);
+      const nextIndex = Math.min(stored.pageIndex, Math.max(0, ids.length - 1));
+      const currentPageId = flat[nextIndex]?.page.id;
+      if (currentPageId) nextVisited.add(currentPageId);
+      setVisited(nextVisited);
+      setIndex(nextIndex);
+      progressRestoringRef.current = false;
+    });
+  }, [courseId, flatIdsKey, resumeFromUrl, flat]);
+
+  const [syncedExpandedIndex, setSyncedExpandedIndex] = useState<number | null>(
+    null,
+  );
+  if (syncedExpandedIndex !== clampedIndex) {
+    setSyncedExpandedIndex(clampedIndex);
+    const lid = flat[clampedIndex]?.lessonId;
+    if (lid) {
+      setExpandedLessonIds((prev) => new Set([...prev, lid]));
+    }
+  }
+
   useEffect(() => {
     function refresh() {
       setFinalQuizSnapshot(readFinalQuizResult(courseId));
     }
-    refresh();
     window.addEventListener("cbl-final-quiz-updated", refresh);
     return () => window.removeEventListener("cbl-final-quiz-updated", refresh);
   }, [courseId]);
@@ -220,22 +304,13 @@ export function CoursePlayer({
       window.removeEventListener("cbl-assessment-attempts-updated", bump);
   }, []);
 
-  useEffect(() => {
-    const existing = readAttemptsState(courseId);
-    if (isCourseLocked(existing, attemptsLimit)) {
-      setAttempts(existing);
-      return;
-    }
-    const { state } = beginAttempt(courseId, attemptsLimit);
-    setAttempts(state);
-  }, [courseId, attemptsLimit]);
-
-  useEffect(() => {
-    if (!courseComplete) return;
-    if (!attempts?.active) return;
-    const next = endAttempt(courseId);
-    setAttempts(next);
-  }, [courseComplete, courseId, attempts?.active]);
+  const markPageVisited = useCallback((pageId: string | undefined) => {
+    if (!pageId) return;
+    setVisited((prev) => {
+      if (prev.has(pageId)) return prev;
+      return new Set([...prev, pageId]);
+    });
+  }, []);
 
   const visitedForNav = useMemo(() => {
     const set = new Set(visited);
@@ -260,30 +335,6 @@ export function CoursePlayer({
     [navigationFlow, flatIds, visitedForNav, flat, courseComplete],
   );
 
-  // Restore visited + page index when course or page order changes — not when only ?start= changes.
-  // useLayoutEffect so this runs before the passive "mark current page visited" effect (avoids a race on mount).
-  useLayoutEffect(() => {
-    if (!flatIdsKey) return;
-    const ids = flatIdsKey.split("|").filter(Boolean);
-    const stored = readPlayProgress(courseId, ids);
-    setVisited(new Set(stored.visitedPageIds));
-    setIndex(stored.pageIndex);
-  }, [courseId, flatIdsKey]);
-
-  // Apply ?start= from the launch screen without wiping visited state from storage.
-  useLayoutEffect(() => {
-    if (!flatIdsKey) return;
-    const ids = flatIdsKey.split("|").filter(Boolean);
-    if (resumeFromUrl === null) return;
-    setIndex(Math.min(resumeFromUrl, Math.max(0, ids.length - 1)));
-  }, [resumeFromUrl, flatIdsKey]);
-
-  useEffect(() => {
-    const pid = flat[clampedIndex]?.page.id;
-    if (!pid) return;
-    setVisited((prev) => new Set([...prev, pid]));
-  }, [clampedIndex, flat]);
-
   useLayoutEffect(() => {
     progressFlushRef.current = {
       pageIndex: clampedIndex,
@@ -292,7 +343,7 @@ export function CoursePlayer({
   }, [clampedIndex, visited]);
 
   useEffect(() => {
-    if (!flatIdsKey) return;
+    if (!flatIdsKey || progressRestoringRef.current) return;
     writePlayProgress(courseId, {
       pageIndex: clampedIndex,
       visitedPageIds: [...visited],
@@ -319,22 +370,14 @@ export function CoursePlayer({
     };
   }, [courseId, flatIdsKey]);
 
-  useEffect(() => {
-    const li = flat[clampedIndex]?.lessonIndex;
-    if (li === undefined) return;
-    const lid = lessons[li]?.id;
-    if (lid) {
-      setExpandedLessonIds((prev) => new Set([...prev, lid]));
-    }
-  }, [clampedIndex, flat, lessons]);
-
   const go = useCallback(
     (next: number) => {
       if (next < 0 || next >= total) return;
       if (!canNavigateToIndex(next)) return;
       setIndex(next);
+      markPageVisited(flat[next]?.page.id);
     },
-    [total, canNavigateToIndex],
+    [total, canNavigateToIndex, flat, markPageVisited],
   );
 
   const navigateToPageId = useCallback(
@@ -343,8 +386,9 @@ export function CoursePlayer({
       if (idx === undefined) return;
       if (!canNavigateToIndex(idx)) return;
       setIndex(idx);
+      markPageVisited(pageId);
     },
-    [flatIndexByPageId, canNavigateToIndex],
+    [flatIndexByPageId, canNavigateToIndex, markPageVisited],
   );
 
   useEffect(() => {
@@ -373,6 +417,8 @@ export function CoursePlayer({
     });
   }, []);
 
+  const resolvedLaunchHref = launchHref ?? `/courses/${courseId}/play`;
+
   if (total === 0) {
     return (
       <div className="mx-auto max-w-2xl bg-white px-4 py-16 text-center">
@@ -380,12 +426,14 @@ export function CoursePlayer({
           This course has no pages yet. Add lessons and pages in the builder to
           preview them here.
         </p>
-        <Link
-          href={`/courses/${courseId}/builder`}
-          className="mt-6 inline-block text-sm font-medium text-zinc-900 underline"
-        >
-          Open page builder
-        </Link>
+        {hideAuthorLinks ? null : (
+          <Link
+            href={`/courses/${courseId}/builder`}
+            className="mt-6 inline-block text-sm font-medium text-zinc-900 underline"
+          >
+            Open page builder
+          </Link>
+        )}
       </div>
     );
   }
@@ -398,6 +446,8 @@ export function CoursePlayer({
         attemptsLimit={attemptsLimit}
         attemptsUsed={attempts.used}
         themeColors={themeColors}
+        launchHref={resolvedLaunchHref}
+        hideAuthorLinks={hideAuthorLinks}
       />
     );
   }
@@ -452,6 +502,7 @@ export function CoursePlayer({
             onSelectPage={(i) => {
               if (!canNavigateToIndex(i)) return;
               setIndex(i);
+              markPageVisited(flat[i]?.page.id);
             }}
           />
         </div>
@@ -500,22 +551,64 @@ export function CoursePlayer({
 
         <div className="flex flex-1 flex-col overflow-y-auto bg-white px-5 py-6 sm:px-8 md:px-10 lg:px-14 xl:px-20">
           <div className="w-full min-w-0 flex-1">
-            <header className="mb-6">
-              <h1
-                className="font-bold tracking-tight text-zinc-900 dark:text-zinc-50"
-                style={{
-                  fontFamily: themeFonts.pageTitle,
-                  fontSize: themeFonts.pageTitleSize,
-                }}
+            {current ? (
+              <PageAudioHost
+                src={resolvePageAudioSrc(
+                  current.page.content,
+                  signedImageUrls,
+                )}
+                pageKey={current.page.id}
+                transcript={getPageAudioTranscript(current.page.content)}
+                pageTitle={current.page.title}
+                highlightColor={themeColors.highlight}
               >
-                {current?.page.title}
-              </h1>
-              <div
-                className="mt-3 h-1 w-16 rounded-full"
-                style={{ backgroundColor: themeColors.highlight }}
-                aria-hidden
-              />
-            </header>
+                <header className="mb-6">
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                    <h1
+                      className="min-w-0 flex-1 font-bold tracking-tight text-zinc-900 dark:text-zinc-50"
+                      style={{
+                        fontFamily: themeFonts.pageTitle,
+                        fontSize: themeFonts.pageTitleSize,
+                      }}
+                    >
+                      {current.page.title}
+                    </h1>
+                    <PageAudioControls />
+                  </div>
+                  <div
+                    className="mt-3 h-1 w-16 rounded-full"
+                    style={{ backgroundColor: themeColors.highlight }}
+                    aria-hidden
+                  />
+                </header>
+
+                <div
+                  style={{
+                    fontFamily: themeFonts.pageContent,
+                    fontSize: themeFonts.pageContentSize,
+                  }}
+                >
+                  <TemplateRenderer
+                    key={current.page.id}
+                    content={current.page.content}
+                    signedImageUrls={signedImageUrls}
+                    courseId={courseId}
+                    pageId={current.page.id}
+                    passingScorePercent={passingScorePercent}
+                    lessonAssessmentPageIds={lessonAssessmentPageIds}
+                    isLastLessonInCourse={isLastLessonInCourse}
+                    knowledgeCheckFeedback={knowledgeCheckFeedback}
+                    assessmentAttemptsLimit={assessmentAttemptsLimit}
+                    courseTitle={courseTitle}
+                    learnerName={learnerName}
+                    courseComplete={courseComplete}
+                    hasFinalAssessment={hasFinalAssessment}
+                    themeColors={themeColors}
+                    onNavigateToPageId={navigateToPageId}
+                  />
+                </div>
+              </PageAudioHost>
+            ) : null}
 
             <div
               style={{
@@ -523,25 +616,6 @@ export function CoursePlayer({
                 fontSize: themeFonts.pageContentSize,
               }}
             >
-              {current ? (
-            <TemplateRenderer
-              key={current.page.id}
-              content={current.page.content}
-              signedImageUrls={signedImageUrls}
-              courseId={courseId}
-              pageId={current.page.id}
-              passingScorePercent={passingScorePercent}
-              lessonAssessmentPageIds={lessonAssessmentPageIds}
-              isLastLessonInCourse={isLastLessonInCourse}
-              assessmentAttemptsLimit={assessmentAttemptsLimit}
-              courseTitle={courseTitle}
-              learnerName={learnerName}
-              courseComplete={courseComplete}
-              hasFinalAssessment={hasFinalAssessment}
-              themeColors={themeColors}
-              onNavigateToPageId={navigateToPageId}
-            />
-              ) : null}
 
               <div className="mt-10 flex flex-col gap-3 border-t border-zinc-200 pt-8">
                 {!isLast ? (
@@ -583,7 +657,7 @@ export function CoursePlayer({
                     </p>
                   ) : (
                     <Link
-                      href={`/courses/${courseId}/play`}
+                      href={resolvedLaunchHref}
                       className="inline-flex h-12 w-full items-center justify-center rounded-xl px-6 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 sm:w-auto sm:min-w-[200px]"
                       style={{ backgroundColor: themeColors.button }}
                     >
@@ -600,24 +674,28 @@ export function CoursePlayer({
             <div className="mt-8 flex flex-wrap gap-4 text-sm text-zinc-600">
               {!(attemptsLimit === 1 && isLast) ? (
                 <Link
-                  href={`/courses/${courseId}/play`}
+                  href={resolvedLaunchHref}
                   className="hover:text-zinc-900"
                 >
                   Course home
                 </Link>
               ) : null}
-              <Link
-                href={`/courses/${courseId}`}
-                className="hover:text-zinc-900"
-              >
-                Settings
-              </Link>
-              <Link
-                href={`/courses/${courseId}/builder`}
-                className="hover:text-zinc-900"
-              >
-                Builder
-              </Link>
+              {hideAuthorLinks ? null : (
+                <>
+                  <Link
+                    href={`/courses/${courseId}`}
+                    className="hover:text-zinc-900"
+                  >
+                    Settings
+                  </Link>
+                  <Link
+                    href={`/courses/${courseId}/builder`}
+                    className="hover:text-zinc-900"
+                  >
+                    Builder
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>

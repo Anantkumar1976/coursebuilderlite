@@ -250,6 +250,7 @@ export type Database = {
         Row: {
           id: string;
           user_id: string;
+          subscription_id: string | null;
           title: string;
           description: string | null;
           status: "draft" | "published";
@@ -264,12 +265,14 @@ export type Database = {
           banner_asset_id: string | null;
           theme_fonts: Json;
           theme_colors: Json;
+          is_featured: boolean;
           created_at: string;
           updated_at: string;
         };
         Insert: {
           id?: string;
           user_id: string;
+          subscription_id?: string | null;
           title: string;
           description?: string | null;
           status?: "draft" | "published";
@@ -284,12 +287,14 @@ export type Database = {
           banner_asset_id?: string | null;
           theme_fonts?: Json;
           theme_colors?: Json;
+          is_featured?: boolean;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
           id?: string;
           user_id?: string;
+          subscription_id?: string | null;
           title?: string;
           description?: string | null;
           status?: "draft" | "published";
@@ -304,6 +309,7 @@ export type Database = {
           banner_asset_id?: string | null;
           theme_fonts?: Json;
           theme_colors?: Json;
+          is_featured?: boolean;
           created_at?: string;
           updated_at?: string;
         };
