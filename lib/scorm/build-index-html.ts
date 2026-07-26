@@ -13,7 +13,6 @@ body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-s
 #sco-main { flex:1; padding:1.5rem 1rem 5rem; }
 .sco-page-title { font-size:1.5rem; font-weight:600; margin:0 0 1rem; letter-spacing:-0.02em; }
 .sco-card { background:var(--card); border:1px solid var(--border); border-radius:1rem; padding:1.5rem; box-shadow:0 1px 2px rgba(0,0,0,.04); }
-.cb-template-label { font-size:0.65rem; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin:0 0 1rem; }
 .cb-body { margin:0 0 0.75rem; white-space:pre-wrap; }
 .cb-rich { font-size:1rem; line-height:1.6; }
 .cb-rich p { margin:0 0 0.75rem; }

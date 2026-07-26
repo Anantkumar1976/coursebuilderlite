@@ -1,6 +1,5 @@
 import { videoEmbedUrl } from "@/lib/course-player/embed-url";
 import {
-  TEMPLATE_LABELS,
   hasQuestionFeedback,
   normalizeClickRevealItems,
   normalizeImageCarouselItems,
@@ -267,12 +266,9 @@ export function pageContentToHtml(
   content: PageContentV1,
   scorm?: PageHtmlScormOptions,
 ): string {
-  const label = TEMPLATE_LABELS[content.template];
-  const badge = `<p class="cb-template-label">${escapeHtml(label)}</p>`;
-
   switch (content.template) {
     case "text":
-      return `${badge}<div class="cb-block">${bodyContentForExport(content.body)}</div>`;
+      return `<div class="cb-block">${bodyContentForExport(content.body)}</div>`;
 
     case "text_image": {
       const c = normalizeTextImageContent(content);
@@ -294,21 +290,21 @@ export function pageContentToHtml(
             `<div class="cb-ti-block">${textImageFigureHtml(src, b.imageAlt)}<div class="cb-block">${bodyContentForExport(b.body)}</div></div>`,
           );
         }
-        return `${badge}<div class="cb-ti-columns ${colsClass}">${parts.join("")}</div>`;
+        return `<div class="cb-ti-columns ${colsClass}">${parts.join("")}</div>`;
       }
       const src = textImageSrc(c, scorm?.scormRelative);
       const img = textImageFigureHtml(src, c.imageAlt);
       const bodyHtml = `<div class="cb-block">${bodyContentForExport(c.body)}</div>`;
       switch (c.layout) {
         case "image_left":
-          return `${badge}<div class="cb-ti-row cb-ti-image-left">${img}${bodyHtml}</div>`;
+          return `<div class="cb-ti-row cb-ti-image-left">${img}${bodyHtml}</div>`;
         case "image_right":
-          return `${badge}<div class="cb-ti-row cb-ti-image-right">${bodyHtml}${img}</div>`;
+          return `<div class="cb-ti-row cb-ti-image-right">${bodyHtml}${img}</div>`;
         case "image_top_full":
-          return `${badge}<div class="cb-ti-stack">${img}${bodyHtml}</div>`;
+          return `<div class="cb-ti-stack">${img}${bodyHtml}</div>`;
         case "text_top_image_bottom_full":
         default:
-          return `${badge}<div class="cb-ti-stack">${bodyHtml}${img}</div>`;
+          return `<div class="cb-ti-stack">${bodyHtml}${img}</div>`;
       }
     }
 
@@ -317,21 +313,21 @@ export function pageContentToHtml(
       const bodyHtml = `<div class="cb-block">${bodyContentForExport(content.body)}</div>`;
       switch (content.layout) {
         case "video_only":
-          return `${badge}${vid}`;
+          return `${vid}`;
         case "video_top":
-          return `${badge}<div class="cb-tv-stack">${vid}${bodyHtml}</div>`;
+          return `<div class="cb-tv-stack">${vid}${bodyHtml}</div>`;
         case "video_left":
-          return `${badge}<div class="cb-tv-row cb-tv-video-left">${vid}${bodyHtml}</div>`;
+          return `<div class="cb-tv-row cb-tv-video-left">${vid}${bodyHtml}</div>`;
         case "video_right":
-          return `${badge}<div class="cb-tv-row cb-tv-video-right">${bodyHtml}${vid}</div>`;
+          return `<div class="cb-tv-row cb-tv-video-right">${bodyHtml}${vid}</div>`;
         case "text_top":
         default:
-          return `${badge}<div class="cb-tv-stack">${bodyHtml}${vid}</div>`;
+          return `<div class="cb-tv-stack">${bodyHtml}${vid}</div>`;
       }
     }
 
     case "two_column":
-      return `${badge}<div class="cb-two-col"><section>${bodyContentForExport(content.left)}</section><section>${bodyContentForExport(content.right)}</section></div>`;
+      return `<div class="cb-two-col"><section>${bodyContentForExport(content.left)}</section><section>${bodyContentForExport(content.right)}</section></div>`;
 
     case "embed_pdf": {
       const src = tabImageSrc(
@@ -343,8 +339,8 @@ export function pageContentToHtml(
         : "";
       const note =
         '<p class="cb-note">Author note: PDF must be publicly available or accessible within your corporate network for learners to open it.</p>';
-      if (!src) return `${badge}${intro}${note}<p class="cb-muted">No PDF selected yet.</p>`;
-      return `${badge}${intro}${note}<div class="cb-pdf-wrap"><iframe src="${escapeAttr(src)}" title="Embedded PDF"></iframe></div><p class="cb-note"><a href="${escapeAttr(src)}" target="_blank" rel="noopener noreferrer">Open PDF in new tab</a></p>`;
+      if (!src) return `${intro}${note}<p class="cb-muted">No PDF selected yet.</p>`;
+      return `${intro}${note}<div class="cb-pdf-wrap"><iframe src="${escapeAttr(src)}" title="Embedded PDF"></iframe></div><p class="cb-note"><a href="${escapeAttr(src)}" target="_blank" rel="noopener noreferrer">Open PDF in new tab</a></p>`;
     }
 
     case "image_carousel": {
@@ -355,7 +351,7 @@ export function pageContentToHtml(
         const intro = content.intro.trim()
           ? `<div class="cb-block">${bodyContentForExport(content.intro)}</div>`
           : "";
-        return `${badge}${intro}<p class="cb-muted">No carousel images set.</p>`;
+        return `${intro}<p class="cb-muted">No carousel images set.</p>`;
       }
       const intro = content.intro.trim()
         ? `<div class="cb-block">${bodyContentForExport(content.intro)}</div>`
@@ -365,7 +361,7 @@ export function pageContentToHtml(
           imageCarouselSlideHtml(it, scorm?.scormRelative, content.captionMode),
         )
         .join("");
-      return `${badge}${intro}<div class="cb-carousel" data-interactive="carousel"><button type="button" class="cb-carousel-nav cb-carousel-prev" aria-label="Previous slide">&#8592;</button><div class="cb-carousel-track">${slides}</div><button type="button" class="cb-carousel-nav cb-carousel-next" aria-label="Next slide">&#8594;</button></div>`;
+      return `${intro}<div class="cb-carousel" data-interactive="carousel"><button type="button" class="cb-carousel-nav cb-carousel-prev" aria-label="Previous slide">&#8592;</button><div class="cb-carousel-track">${slides}</div><button type="button" class="cb-carousel-nav cb-carousel-next" aria-label="Next slide">&#8594;</button></div>`;
     }
 
     case "image_grid": {
@@ -395,7 +391,7 @@ export function pageContentToHtml(
       const intro = content.intro.trim()
         ? `<div class="cb-block">${bodyContentForExport(content.intro)}</div>`
         : "";
-      return `${badge}${intro}<div class="cb-grid ${cols}" data-row-mode="${content.rowMode}" data-interactive="image-grid">${cards}</div>`;
+      return `${intro}<div class="cb-grid ${cols}" data-row-mode="${content.rowMode}" data-interactive="image-grid">${cards}</div>`;
     }
 
     case "tabs": {
@@ -435,14 +431,14 @@ export function pageContentToHtml(
           },
         )
         .join("");
-      return `${badge}<div class="cb-tabs ${isVertical ? "cb-tabs-vertical" : "cb-tabs-horizontal"}" data-interactive="tabs"><div class="cb-tab-labels" role="tablist"${isVertical ? ' aria-orientation="vertical"' : ""}>${labels}</div><div class="cb-tab-panels">${panels}</div></div>`;
+      return `<div class="cb-tabs ${isVertical ? "cb-tabs-vertical" : "cb-tabs-horizontal"}" data-interactive="tabs"><div class="cb-tab-labels" role="tablist"${isVertical ? ' aria-orientation="vertical"' : ""}>${labels}</div><div class="cb-tab-panels">${panels}</div></div>`;
     }
 
     case "accordion": {
       const items = content.items.length
         ? content.items
         : [{ id: "a", title: "Section", body: "" }];
-      return `${badge}${items
+      return `${items
         .map(
           (it) =>
             `<details class="cb-details"><summary class="cb-summary">${escapeHtml(it.title || "Section")}</summary><div class="cb-details-body">${bodyContentForExport(it.body)}</div></details>`,
@@ -475,11 +471,11 @@ export function pageContentToHtml(
           clickRevealPanelHtml(card, i, scorm?.scormRelative),
         )
         .join("");
-      return `${badge}${intro}<div class="cb-click-reveal" data-interactive="click-reveal"><div class="cb-cr-grid ${gridClass}">${cardButtons}</div><div class="cb-cr-dialog" hidden aria-hidden="true"><div class="cb-cr-dialog-backdrop"></div><div class="cb-cr-dialog-shell" role="dialog" aria-modal="true"><div class="cb-cr-dialog-inner">${panels}</div></div></div></div>`;
+      return `${intro}<div class="cb-click-reveal" data-interactive="click-reveal"><div class="cb-cr-grid ${gridClass}">${cardButtons}</div><div class="cb-cr-dialog" hidden aria-hidden="true"><div class="cb-cr-dialog-backdrop"></div><div class="cb-cr-dialog-shell" role="dialog" aria-modal="true"><div class="cb-cr-dialog-inner">${panels}</div></div></div></div>`;
     }
 
     case "course_completion":
-      return `${badge}<div class="cb-final"><p class="cb-final-h">Course completion</p><div class="cb-block">${bodyContentForExport(content.summary)}</div><p class="cb-note">Certificate printing is available in the web player.</p></div>`;
+      return `<div class="cb-final"><p class="cb-final-h">Course completion</p><div class="cb-block">${bodyContentForExport(content.summary)}</div><p class="cb-note">Certificate printing is available in the web player.</p></div>`;
 
     case "mcq": {
       const kc = hasQuestionFeedback(content);
@@ -492,7 +488,7 @@ export function pageContentToHtml(
       const submitBtn = kc
         ? `<button type="button" class="cb-submit-btn">Submit</button>`
         : "";
-      return `${badge}<div class="cb-assess cb-mcq" data-correct-index="${content.correctIndex}"${questionFeedbackAttrs(content, scorm?.scormRelative)}><p class="cb-q">${escapeHtml(content.question || "Question")}</p><ul class="cb-opt-list">${opts}</ul>${submitBtn}<div class="cb-feedback" hidden></div>${questionFeedbackMarkup(content)}</div>`;
+      return `<div class="cb-assess cb-mcq" data-correct-index="${content.correctIndex}"${questionFeedbackAttrs(content, scorm?.scormRelative)}><p class="cb-q">${escapeHtml(content.question || "Question")}</p><ul class="cb-opt-list">${opts}</ul>${submitBtn}<div class="cb-feedback" hidden></div>${questionFeedbackMarkup(content)}</div>`;
     }
 
     case "mrq": {
@@ -504,7 +500,7 @@ export function pageContentToHtml(
             `<li><label class="cb-mrq-label"><input type="checkbox" class="cb-mrq-cb" data-index="${idx}"/> <span>${escapeHtml(opt || `Option ${idx + 1}`)}</span></label></li>`,
         )
         .join("");
-      return `${badge}<div class="cb-assess cb-mrq" data-correct-indices="${correctJson}"${questionFeedbackAttrs(content, scorm?.scormRelative)}><p class="cb-q">${escapeHtml(content.question || "Question")}</p><ul class="cb-opt-list">${opts}</ul><button type="button" class="cb-check-btn">${kc ? "Submit" : "Check answer"}</button><div class="cb-feedback" hidden></div>${questionFeedbackMarkup(content)}</div>`;
+      return `<div class="cb-assess cb-mrq" data-correct-indices="${correctJson}"${questionFeedbackAttrs(content, scorm?.scormRelative)}><p class="cb-q">${escapeHtml(content.question || "Question")}</p><ul class="cb-opt-list">${opts}</ul><button type="button" class="cb-check-btn">${kc ? "Submit" : "Check answer"}</button><div class="cb-feedback" hidden></div>${questionFeedbackMarkup(content)}</div>`;
     }
 
     case "true_false": {
@@ -512,13 +508,13 @@ export function pageContentToHtml(
       const submitBtn = kc
         ? `<button type="button" class="cb-submit-btn">Submit</button>`
         : "";
-      return `${badge}<div class="cb-assess cb-tf" data-correct="${content.correct ? "true" : "false"}"${questionFeedbackAttrs(content, scorm?.scormRelative)}><p class="cb-q">${escapeHtml(content.question || "Statement")}</p><div class="cb-tf-btns"><button type="button" class="cb-tf-btn" data-val="true">True</button><button type="button" class="cb-tf-btn" data-val="false">False</button></div>${submitBtn}<div class="cb-feedback" hidden></div>${questionFeedbackMarkup(content)}</div>`;
+      return `<div class="cb-assess cb-tf" data-correct="${content.correct ? "true" : "false"}"${questionFeedbackAttrs(content, scorm?.scormRelative)}><p class="cb-q">${escapeHtml(content.question || "Statement")}</p><div class="cb-tf-btns"><button type="button" class="cb-tf-btn" data-val="true">True</button><button type="button" class="cb-tf-btn" data-val="false">False</button></div>${submitBtn}<div class="cb-feedback" hidden></div>${questionFeedbackMarkup(content)}</div>`;
     }
 
     case "final_quiz":
-      return `${badge}<div class="cb-final"><div class="cb-block">${bodyContentForExport(content.intro)}</div><p class="cb-note">Add separate question pages in the lesson; the LMS can aggregate scores from those pages.</p></div>`;
+      return `<div class="cb-final"><div class="cb-block">${bodyContentForExport(content.intro)}</div><p class="cb-note">Add separate question pages in the lesson; the LMS can aggregate scores from those pages.</p></div>`;
 
     case "quiz_results":
-      return `${badge}<div class="cb-quiz-results"><div class="cb-block">${bodyContentForExport(content.intro)}</div><div class="cb-quiz-pass" hidden><p class="cb-final-h">Pass</p>${bodyContentForExport(content.passMessage)}</div><div class="cb-quiz-fail" hidden><p class="cb-final-h">Fail</p>${bodyContentForExport(content.failMessage)}</div><p class="cb-note">The LMS shows pass or fail here after the quiz is scored.</p></div>`;
+      return `<div class="cb-quiz-results"><div class="cb-block">${bodyContentForExport(content.intro)}</div><div class="cb-quiz-pass" hidden><p class="cb-final-h">Pass</p>${bodyContentForExport(content.passMessage)}</div><div class="cb-quiz-fail" hidden><p class="cb-final-h">Fail</p>${bodyContentForExport(content.failMessage)}</div><p class="cb-note">The LMS shows pass or fail here after the quiz is scored.</p></div>`;
   }
 }

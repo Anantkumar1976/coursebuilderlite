@@ -30,7 +30,6 @@ import { PRODUCT_LOGO_SRC } from "@/lib/branding/site";
 import {
   IMAGE_CAROUSEL_CAPTION_MODE_LABELS,
   IMAGE_GRID_LAYOUT_LABELS,
-  TEMPLATE_LABELS,
   normalizeImageCarouselItems,
   normalizeImageGridItems,
   resolveQuestionFeedbackAudioSrc,
@@ -337,14 +336,8 @@ export function TemplateRenderer({
   // eslint-disable-next-line react-hooks/exhaustive-deps -- assessVersion bump refreshes local storage reads
   }, [courseId, lastLesson, assessmentLimit, assessVersion]);
 
-  const label = TEMPLATE_LABELS[content.template];
-
   return (
-    <article className="space-y-6" aria-label={`Template: ${label}`}>
-      <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-500">
-        {label}
-      </p>
-
+    <article className="space-y-6">
       {content.template === "text" ? <RichBodyHtml html={content.body} /> : null}
 
       {content.template === "text_image" ? (
