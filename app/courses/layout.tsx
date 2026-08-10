@@ -7,6 +7,7 @@ import {
   BillingEnforcementError,
   syncAndValidateSubscriptionStatus,
 } from "@/lib/billing/enforcement";
+import { ensureMasterAdminWorkspace } from "@/lib/billing/master-admin-workspace";
 import { isMasterAdminUser } from "@/lib/auth/admin";
 import {
   HEADER_PRODUCT_LABEL,
@@ -31,7 +32,10 @@ export default async function CoursesLayout({
   const hasSubscription =
     typeof user.user_metadata?.paypal_subscription_id === "string" &&
     user.user_metadata.paypal_subscription_id.length > 0;
-  if (!masterAdmin) {
+  if (masterAdmin) {
+    // Bootstrap the synthetic Pro workspace so Team invites + shared courses work.
+    await ensureMasterAdminWorkspace(user);
+  } else {
     try {
       await syncAndValidateSubscriptionStatus(supabase, user);
     } catch (error) {
@@ -82,7 +86,7 @@ export default async function CoursesLayout({
                   Admin
                 </Link>
               ) : null}
-              {!masterAdmin && hasSubscription ? (
+              {masterAdmin || hasSubscription ? (
                 <Link
                   href="/courses/team"
                   className="transition-colors hover:text-zinc-900 dark:hover:text-zinc-50"

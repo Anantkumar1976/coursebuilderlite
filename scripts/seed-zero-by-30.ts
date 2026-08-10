@@ -20,6 +20,7 @@ import { config as loadEnv } from "dotenv";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { MASTER_ADMIN_SUBSCRIPTION_ID } from "@/lib/billing/master-admin-workspace";
 import type { Database } from "@/lib/supabase/database.types";
 import { COURSE_CONTENT, COURSE_META } from "./zero-by-30-content";
 
@@ -109,7 +110,7 @@ async function main() {
     .from("courses")
     .insert({
       user_id: userId,
-      subscription_id: null,
+      subscription_id: MASTER_ADMIN_SUBSCRIPTION_ID,
       title: COURSE_META.title,
       description: COURSE_META.description,
       manifest_description: COURSE_META.manifestDescription,

@@ -42,8 +42,11 @@ export default async function AdminPage() {
           Admin dashboard requires a server-side Supabase service role key.
         </p>
         <div className="mt-6 rounded-xl border border-amber-300/70 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-          Set <code>SUPABASE_SERVICE_ROLE_KEY</code> in your environment, then restart{" "}
-          <code>npm run dev</code>.
+          Set <code>SUPABASE_SERVICE_ROLE_KEY</code> as a server-only environment
+          variable (never prefix with <code>NEXT_PUBLIC_</code>). On Vercel: Project
+          → Settings → Environment Variables → add it for Production (and Preview if
+          needed), then Redeploy. Locally: add it to <code>.env.local</code> and
+          restart <code>npm run dev</code>.
         </div>
         <Link
           href="/courses"
