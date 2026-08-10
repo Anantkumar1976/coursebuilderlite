@@ -8,6 +8,10 @@ import {
   ensureAuthorSeatAvailable,
 } from "@/lib/billing/enforcement";
 import { isMasterAdminUser } from "@/lib/auth/admin";
+import {
+  ensureMasterAdminWorkspace,
+  MASTER_ADMIN_SUBSCRIPTION_ID,
+} from "@/lib/billing/master-admin-workspace";
 import { parseAttemptsLimit } from "@/lib/course-player/attempts";
 import {
   parseNavigationFlow,
@@ -58,10 +62,15 @@ export async function createCourse(formData: FormData) {
     if (!hasAdminSupabaseEnv()) {
       redirect("/courses/new?error=admin-config");
     }
+    await ensureMasterAdminWorkspace(user);
     const admin = createAdminClient();
     const { data, error } = await admin
       .from("courses")
-      .insert({ user_id: user.id, subscription_id: null, title })
+      .insert({
+        user_id: user.id,
+        subscription_id: MASTER_ADMIN_SUBSCRIPTION_ID,
+        title,
+      })
       .select("id")
       .single();
     if (error) {

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { getPlanMetadataFromUser } from "@/lib/billing/enforcement";
 import { createClient } from "@/lib/supabase/server";
 
 function startOfMonthIso() {
@@ -14,18 +15,30 @@ export default async function CoursesPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const authorsLimit =
-    typeof user?.user_metadata?.authors_limit === "number"
-      ? user.user_metadata.authors_limit
-      : Number(user?.user_metadata?.authors_limit ?? 0);
-  const monthlyExportsLimit =
-    typeof user?.user_metadata?.monthly_exports_limit === "number"
-      ? user.user_metadata.monthly_exports_limit
-      : Number(user?.user_metadata?.monthly_exports_limit ?? 0);
-  const subscriptionId =
-    typeof user?.user_metadata?.paypal_subscription_id === "string"
-      ? user.user_metadata.paypal_subscription_id
-      : null;
+  let authorsLimit = 0;
+  let monthlyExportsLimit = 0;
+  let subscriptionId: string | null = null;
+  if (user) {
+    try {
+      const meta = getPlanMetadataFromUser(user);
+      authorsLimit = meta.authorsLimit;
+      monthlyExportsLimit = meta.monthlyExportsLimit;
+      subscriptionId = meta.subscriptionId;
+    } catch {
+      authorsLimit =
+        typeof user.user_metadata?.authors_limit === "number"
+          ? user.user_metadata.authors_limit
+          : Number(user.user_metadata?.authors_limit ?? 0);
+      monthlyExportsLimit =
+        typeof user.user_metadata?.monthly_exports_limit === "number"
+          ? user.user_metadata.monthly_exports_limit
+          : Number(user.user_metadata?.monthly_exports_limit ?? 0);
+      subscriptionId =
+        typeof user.user_metadata?.paypal_subscription_id === "string"
+          ? user.user_metadata.paypal_subscription_id
+          : null;
+    }
+  }
 
   const { data: courses, error } = await supabase
     .from("courses")

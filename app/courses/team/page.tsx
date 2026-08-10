@@ -12,6 +12,7 @@ import {
   getPlanMetadataFromUser,
   syncAndValidateSubscriptionStatus,
 } from "@/lib/billing/enforcement";
+import { ensureMasterAdminWorkspace } from "@/lib/billing/master-admin-workspace";
 import { hasAdminSupabaseEnv, createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -80,8 +81,9 @@ export default async function TeamPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/courses/team");
 
-  if (isMasterAdminUser(user)) {
-    redirect("/admin");
+  const masterAdmin = isMasterAdminUser(user);
+  if (masterAdmin) {
+    await ensureMasterAdminWorkspace(user);
   }
 
   let metadata: ReturnType<typeof getPlanMetadataFromUser>;
@@ -91,16 +93,18 @@ export default async function TeamPage({
     redirect("/courses");
   }
 
-  try {
-    await syncAndValidateSubscriptionStatus(supabase, user);
-  } catch (error) {
-    if (
-      error instanceof BillingEnforcementError &&
-      error.code === "subscription-inactive"
-    ) {
-      redirect("/login?error=subscription-inactive");
+  if (!masterAdmin) {
+    try {
+      await syncAndValidateSubscriptionStatus(supabase, user);
+    } catch (error) {
+      if (
+        error instanceof BillingEnforcementError &&
+        error.code === "subscription-inactive"
+      ) {
+        redirect("/login?error=subscription-inactive");
+      }
+      throw error;
     }
-    throw error;
   }
 
   const { data: invites, error: invErr } = await supabase
@@ -160,8 +164,16 @@ export default async function TeamPage({
         Courses live in one shared workspace for this subscription — removing a member frees their
         seat but keeps their courses available to the team.
       </p>
+      {masterAdmin ? (
+        <p className="mt-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-950 dark:border-teal-900/50 dark:bg-teal-950/30 dark:text-teal-100">
+          Master admin workspace is on the <span className="font-semibold">Pro</span> plan (
+          {metadata.authorsLimit} author seats) so you can invite co-authors to build sample
+          courses.
+        </p>
+      ) : null}
       <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
         Subscription <span className="font-mono text-xs">{metadata.subscriptionId}</span> ·{" "}
+        Plan <span className="font-medium">{metadata.planKey}</span> ·{" "}
         {used} / {metadata.authorsLimit} seats in use (including pending invites)
         {seatsRemaining > 0 ? ` · ${seatsRemaining} available` : " · none available"}
       </p>

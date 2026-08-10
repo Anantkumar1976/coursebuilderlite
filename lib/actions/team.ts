@@ -9,6 +9,7 @@ import {
   getPlanMetadataFromUser,
   syncAndValidateSubscriptionStatus,
 } from "@/lib/billing/enforcement";
+import { ensureMasterAdminWorkspace } from "@/lib/billing/master-admin-workspace";
 import { sendTeamInviteEmail } from "@/lib/email/team-invite-email";
 import { PAYPAL_PLAN_CONFIG, type PaypalPlanKey } from "@/lib/paypal/subscriptions";
 import { createAdminClient, hasAdminSupabaseEnv } from "@/lib/supabase/admin";
@@ -68,8 +69,15 @@ export async function createTeamInvite(formData: FormData) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Not signed in.");
-  if (isMasterAdminUser(user)) {
-    throw new Error("Master admin uses the admin dashboard instead.");
+
+  const masterAdmin = isMasterAdminUser(user);
+  if (masterAdmin) {
+    if (!hasAdminSupabaseEnv()) {
+      throw new Error(
+        "Server is missing SUPABASE_SERVICE_ROLE_KEY; cannot manage the admin Pro workspace.",
+      );
+    }
+    await ensureMasterAdminWorkspace(user);
   }
 
   let metadata;
@@ -78,19 +86,24 @@ export async function createTeamInvite(formData: FormData) {
   } catch {
     throw new Error("Only subscribers can send team invites.");
   }
-  await syncAndValidateSubscriptionStatus(supabase, user);
+  if (!masterAdmin) {
+    await syncAndValidateSubscriptionStatus(supabase, user);
+  }
 
   if (normalizeEmail(user.email ?? "") === email) {
     throw new Error("You cannot invite your own email.");
   }
 
-  const { count: memberCount, error: memberErr } = await supabase
+  // Master admin may have a stale JWT before metadata refresh — use service role.
+  const db = masterAdmin ? createAdminClient() : supabase;
+
+  const { count: memberCount, error: memberErr } = await db
     .from("billing_subscription_memberships")
     .select("id", { count: "exact", head: true })
     .eq("subscription_id", metadata.subscriptionId);
   if (memberErr) throw new Error(memberErr.message);
 
-  const { count: pendingCount, error: pendingErr } = await supabase
+  const { count: pendingCount, error: pendingErr } = await db
     .from("billing_team_invites")
     .select("id", { count: "exact", head: true })
     .eq("subscription_id", metadata.subscriptionId)
@@ -111,7 +124,7 @@ export async function createTeamInvite(formData: FormData) {
 
   const token = generateInviteToken();
   const expiresAt = inviteExpiryIso();
-  const { error } = await supabase.from("billing_team_invites").insert({
+  const { error } = await db.from("billing_team_invites").insert({
     subscription_id: metadata.subscriptionId,
     invited_by_user_id: user.id,
     email_normalized: email,

@@ -1,6 +1,7 @@
 import type { User } from "@supabase/supabase-js";
 
 import { isMasterAdminUser } from "@/lib/auth/admin";
+import { getMasterAdminPlanMetadata } from "@/lib/billing/master-admin-workspace";
 import type { Database } from "@/lib/supabase/database.types";
 import type { createClient } from "@/lib/supabase/server";
 
@@ -39,6 +40,11 @@ function readPositiveInt(value: unknown): number | null {
 }
 
 export function getPlanMetadataFromUser(user: User): UserPlanMetadata {
+  // Master admin always has a synthetic Pro workspace (no PayPal required).
+  if (isMasterAdminUser(user)) {
+    return getMasterAdminPlanMetadata();
+  }
+
   const raw = user.user_metadata ?? {};
   const subscriptionId = raw.paypal_subscription_id;
   const planKey = raw.subscription_plan;
