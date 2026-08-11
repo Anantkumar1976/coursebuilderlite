@@ -9,6 +9,7 @@ type TeamInviteEmailInput = {
   planLabel: string;
   token: string;
   expiresAt: string;
+  workspaceName?: string | null;
 };
 
 function formatExpiryDate(iso: string) {
@@ -32,11 +33,17 @@ export async function sendTeamInviteEmail(input: TeamInviteEmailInput) {
   const loginUrl = `${siteUrl}/login?next=${encodeURIComponent(`/team/accept/${input.token}`)}`;
   const expiryLabel = formatExpiryDate(input.expiresAt);
   const inviter = input.inviterEmail.trim() || "A teammate";
+  const workspace = input.workspaceName?.trim() || null;
+  const teamLabel = workspace
+    ? `${workspace} on ${PRODUCT_NAME}`
+    : `their ${PRODUCT_NAME} team`;
 
-  const subject = `You're invited to ${PRODUCT_NAME}`;
+  const subject = workspace
+    ? `You're invited to ${workspace} on ${PRODUCT_NAME}`
+    : `You're invited to ${PRODUCT_NAME}`;
 
   const text = [
-    `${inviter} invited you to join their ${PRODUCT_NAME} team (${input.planLabel} plan).`,
+    `${inviter} invited you to join ${teamLabel} (${input.planLabel} plan).`,
     "",
     "Create your account:",
     signupUrl,
@@ -56,8 +63,13 @@ export async function sendTeamInviteEmail(input: TeamInviteEmailInput) {
     <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.5;color:#18181b;max-width:560px">
       <p style="font-size:18px;font-weight:600;margin:0 0 12px">${escapeHtml(PRODUCT_NAME)} team invite</p>
       <p style="margin:0 0 16px">
-        <strong>${escapeHtml(inviter)}</strong> invited you to join their team on the
-        <strong>${escapeHtml(input.planLabel)}</strong> plan.
+        <strong>${escapeHtml(inviter)}</strong> invited you to join
+        ${
+          workspace
+            ? `<strong>${escapeHtml(workspace)}</strong> on`
+            : "their team on"
+        }
+        the <strong>${escapeHtml(input.planLabel)}</strong> plan.
       </p>
       <p style="margin:0 0 20px">
         <a href="${signupUrl}" style="display:inline-block;background:#18181b;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600">

@@ -43,9 +43,11 @@ export async function ensureMasterAdminWorkspace(user: User): Promise<void> {
 
   const { data: existingSub } = await admin
     .from("billing_subscriptions")
-    .select("id, status")
+    .select("id, status, workspace_name")
     .eq("subscription_id", meta.subscriptionId)
     .maybeSingle();
+
+  const workspaceName = "Akhila Admin";
 
   if (!existingSub?.id) {
     const { error } = await admin.from("billing_subscriptions").insert({
@@ -55,22 +57,38 @@ export async function ensureMasterAdminWorkspace(user: User): Promise<void> {
       plan_key: meta.planKey,
       status: "active",
       activated_at: now,
+      workspace_name: workspaceName,
     });
     if (error) {
       console.error("[ensureMasterAdminWorkspace] subscription insert", error);
       return;
     }
-  } else if (existingSub.status !== "active") {
+  } else if (
+    existingSub.status !== "active" ||
+    existingSub.workspace_name !== workspaceName
+  ) {
+    const patch: {
+      status: string;
+      user_id: string;
+      plan_key: string;
+      provider: string;
+      cancelled_at: null;
+      workspace_name: string;
+      activated_at?: string;
+    } = {
+      status: "active",
+      user_id: user.id,
+      plan_key: meta.planKey,
+      provider: "internal",
+      cancelled_at: null,
+      workspace_name: workspaceName,
+    };
+    if (existingSub.status !== "active") {
+      patch.activated_at = now;
+    }
     const { error } = await admin
       .from("billing_subscriptions")
-      .update({
-        status: "active",
-        user_id: user.id,
-        plan_key: meta.planKey,
-        provider: "internal",
-        activated_at: now,
-        cancelled_at: null,
-      })
+      .update(patch)
       .eq("id", existingSub.id);
     if (error) {
       console.error("[ensureMasterAdminWorkspace] subscription update", error);
@@ -105,7 +123,8 @@ export async function ensureMasterAdminWorkspace(user: User): Promise<void> {
     raw.subscription_plan !== meta.planKey ||
     String(raw.authors_limit) !== String(meta.authorsLimit) ||
     String(raw.monthly_exports_limit) !== String(meta.monthlyExportsLimit) ||
-    raw.subscription_status !== "active";
+    raw.subscription_status !== "active" ||
+    raw.workspace_name !== workspaceName;
 
   if (needsMetaUpdate) {
     const { error } = await admin.auth.admin.updateUserById(user.id, {
@@ -116,6 +135,7 @@ export async function ensureMasterAdminWorkspace(user: User): Promise<void> {
         authors_limit: meta.authorsLimit,
         monthly_exports_limit: meta.monthlyExportsLimit,
         subscription_status: "active",
+        workspace_name: workspaceName,
       },
     });
     if (error) {
