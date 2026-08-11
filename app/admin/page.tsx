@@ -64,7 +64,7 @@ export default async function AdminPage() {
     coursesResult,
     subscriptionsResult,
     exportsCountResult,
-    usersCountResult,
+    membershipsResult,
     coursesCountResult,
   ] = await Promise.all([
     admin.auth.admin.listUsers({ page: 1, perPage: 200 }),
@@ -75,22 +75,52 @@ export default async function AdminPage() {
       .limit(100),
     admin
       .from("billing_subscriptions")
-      .select("subscription_id, user_id, status, plan_key, updated_at")
+      .select("subscription_id, user_id, status, plan_key, workspace_name, updated_at")
       .order("updated_at", { ascending: false })
       .limit(200),
     admin.from("billing_export_events").select("id", { count: "exact", head: true }),
-    admin.from("billing_subscription_memberships").select("id", { count: "exact", head: true }),
+    admin.from("billing_subscription_memberships").select("id, user_id, subscription_id"),
     admin.from("courses").select("id", { count: "exact", head: true }),
   ]);
 
   const users = usersResponse.data.users ?? [];
   const subscriptions = subscriptionsResult.data ?? [];
+  const memberships = membershipsResult.data ?? [];
+  const usersById = new Map(users.map((u) => [u.id, u]));
+  const subscriptionById = new Map(
+    subscriptions.map((s) => [s.subscription_id, s] as const),
+  );
+  const authorsBySubscription = new Map<string, { id: string; email: string | null }[]>();
+  for (const membership of memberships) {
+    const list = authorsBySubscription.get(membership.subscription_id) ?? [];
+    const memberUser = usersById.get(membership.user_id);
+    list.push({
+      id: membership.user_id,
+      email: memberUser?.email ?? null,
+    });
+    authorsBySubscription.set(membership.subscription_id, list);
+  }
   const activeSubscriptions = subscriptions.filter((s) => s.status === "active");
   const estimatedMrr = activeSubscriptions.reduce((sum, subscription) => {
     const plan = asPlanKey(subscription.plan_key);
     if (!plan) return sum;
     return sum + PLAN_PRICING[plan];
   }, 0);
+
+  function workspaceForUser(userId: string): string | null {
+    const authUser = usersById.get(userId);
+    const fromMeta =
+      typeof authUser?.user_metadata?.workspace_name === "string"
+        ? authUser.user_metadata.workspace_name.trim()
+        : "";
+    if (fromMeta) return fromMeta;
+    const subId =
+      typeof authUser?.user_metadata?.paypal_subscription_id === "string"
+        ? authUser.user_metadata.paypal_subscription_id
+        : null;
+    if (!subId) return null;
+    return subscriptionById.get(subId)?.workspace_name?.trim() || null;
+  }
 
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-6">
@@ -131,18 +161,75 @@ export default async function AdminPage() {
       <section className="mt-10 rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900/40">
         <h2 className="text-sm font-semibold">System totals</h2>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          Author seats in use: {usersCountResult.count ?? 0} · Total export events:{" "}
+          Author seats in use: {memberships.length} · Total export events:{" "}
           {exportsCountResult.count ?? 0}
         </p>
       </section>
 
       <section className="mt-10 rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900/40">
+        <h2 className="text-sm font-semibold">Authors by company / workgroup</h2>
+        <p className="mt-1 text-xs text-zinc-500">
+          Each subscription workspace and the authors currently on it.
+        </p>
+        <div className="mt-4 space-y-3">
+          {subscriptions.length === 0 ? (
+            <p className="text-sm text-zinc-500">No subscriptions yet.</p>
+          ) : (
+            subscriptions.map((s) => {
+              const authors = authorsBySubscription.get(s.subscription_id) ?? [];
+              const owner = s.user_id ? usersById.get(s.user_id) : null;
+              const ownerListed = s.user_id
+                ? authors.some((a) => a.id === s.user_id)
+                : true;
+              const displayAuthors = [
+                ...(!ownerListed && s.user_id
+                  ? [{ id: s.user_id, email: owner?.email ?? null }]
+                  : []),
+                ...authors,
+              ];
+              return (
+                <article
+                  key={`workspace-${s.subscription_id}`}
+                  className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800"
+                >
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                    {s.workspace_name?.trim() || "Unnamed workgroup"}
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Plan: {s.plan_key ?? "unknown"} · Status: {s.status} ·{" "}
+                    <span className="font-mono">{s.subscription_id}</span>
+                  </p>
+                  <ul className="mt-2 space-y-1 text-sm text-zinc-700 dark:text-zinc-300">
+                    {displayAuthors.length === 0 ? (
+                      <li className="text-xs text-zinc-500">No authors linked yet.</li>
+                    ) : (
+                      displayAuthors.map((author) => (
+                        <li key={author.id}>
+                          {author.email ?? author.id}
+                          {author.id === s.user_id ? (
+                            <span className="ml-1 text-xs text-zinc-500">(subscriber)</span>
+                          ) : null}
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                </article>
+              );
+            })
+          )}
+        </div>
+      </section>
+
+      <section className="mt-10 rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900/40">
         <h2 className="text-sm font-semibold">Users</h2>
         <div className="mt-4 space-y-3">
-          {users.map((u) => (
+          {users.map((u) => {
+            const workgroup = workspaceForUser(u.id);
+            return (
             <article key={u.id} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
               <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{u.email ?? u.id}</p>
               <p className="mt-1 text-xs text-zinc-500">
+                {workgroup ? `Workgroup: ${workgroup} · ` : null}
                 Created {new Date(u.created_at).toLocaleDateString()} · Last sign in{" "}
                 {u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString() : "Never"}
               </p>
@@ -176,7 +263,8 @@ export default async function AdminPage() {
                 </form>
               </div>
             </article>
-          ))}
+            );
+          })}
         </div>
       </section>
 
@@ -188,9 +276,13 @@ export default async function AdminPage() {
               key={s.subscription_id}
               className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800"
             >
-              <p className="text-sm font-medium">{s.subscription_id}</p>
+              <p className="text-sm font-medium">
+                {s.workspace_name?.trim() || "Unnamed workgroup"}
+              </p>
               <p className="mt-1 text-xs text-zinc-500">
-                User: {s.user_id ?? "unclaimed"} · Plan: {s.plan_key ?? "unknown"} · Status: {s.status}
+                <span className="font-mono">{s.subscription_id}</span> · User:{" "}
+                {s.user_id ? (usersById.get(s.user_id)?.email ?? s.user_id) : "unclaimed"} · Plan:{" "}
+                {s.plan_key ?? "unknown"} · Status: {s.status}
               </p>
               <form action={adminSetSubscriptionStatus} className="mt-3 flex items-center gap-2">
                 <input type="hidden" name="subscription_id" value={s.subscription_id} />

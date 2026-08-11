@@ -5,23 +5,19 @@ import {
   createTeamInvite,
   removeTeamMember,
   revokeTeamInvite,
+  updateWorkspaceName,
 } from "@/lib/actions/team";
 import { isMasterAdminUser } from "@/lib/auth/admin";
+import { getSiteUrl } from "@/lib/auth/site-url";
 import {
   BillingEnforcementError,
   getPlanMetadataFromUser,
   syncAndValidateSubscriptionStatus,
 } from "@/lib/billing/enforcement";
 import { ensureMasterAdminWorkspace } from "@/lib/billing/master-admin-workspace";
+import { WORKSPACE_NAME_MAX_LENGTH } from "@/lib/billing/workspace-name";
 import { hasAdminSupabaseEnv, createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-
-function baseUrl() {
-  if (process.env.NEXT_PUBLIC_SITE_URL) {
-    return process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
-  }
-  return "http://localhost:3000";
-}
 
 function getInviteFeedback(params: {
   invite_sent?: string;
@@ -29,7 +25,14 @@ function getInviteFeedback(params: {
   email_skipped?: string;
   email_failed?: string;
   email?: string;
+  workspace_saved?: string;
 }) {
+  if (params.workspace_saved === "1") {
+    return {
+      tone: "success" as const,
+      message: "Company / workgroup name saved.",
+    };
+  }
   if (params.invite_sent !== "1") return null;
   if (params.email_sent === "1") {
     const target = params.email?.trim();
@@ -71,6 +74,7 @@ export default async function TeamPage({
     email_skipped?: string;
     email_failed?: string;
     email?: string;
+    workspace_saved?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -134,6 +138,19 @@ export default async function TeamPage({
     .eq("subscription_id", metadata.subscriptionId)
     .eq("status", "pending");
 
+  const { data: subscriptionRow } = await supabase
+    .from("billing_subscriptions")
+    .select("workspace_name")
+    .eq("subscription_id", metadata.subscriptionId)
+    .maybeSingle();
+
+  const workspaceLabel =
+    subscriptionRow?.workspace_name?.trim() ||
+    (typeof user.user_metadata?.workspace_name === "string"
+      ? user.user_metadata.workspace_name.trim()
+      : "") ||
+    "";
+
   const used = (memberCount ?? 0) + (pendingCount ?? 0);
   const seatsRemaining = Math.max(0, metadata.authorsLimit - used);
 
@@ -191,6 +208,43 @@ export default async function TeamPage({
       ) : null}
 
       <section className="mt-10 rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900/40">
+        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+          Company / workgroup
+        </h2>
+        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+          This name appears on invites, your team courses list, and the admin dashboard.
+        </p>
+        <form action={updateWorkspaceName} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <label
+              htmlFor="workspace_name"
+              className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
+            >
+              Name
+            </label>
+            <input
+              id="workspace_name"
+              name="workspace_name"
+              type="text"
+              required
+              minLength={2}
+              maxLength={WORKSPACE_NAME_MAX_LENGTH}
+              defaultValue={workspaceLabel}
+              autoComplete="organization"
+              placeholder="e.g. Acme Learning Team"
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-zinc-400 placeholder:text-zinc-400 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+            />
+          </div>
+          <button
+            type="submit"
+            className="inline-flex h-10 shrink-0 items-center justify-center rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+          >
+            Save
+          </button>
+        </form>
+      </section>
+
+      <section className="mt-10 rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900/40">
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Invite a teammate</h2>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
           Enter their email to send an invite (or copy a link from Pending invites if email is not
@@ -229,8 +283,8 @@ export default async function TeamPage({
           {(invites ?? [])
             .filter((i) => i.status === "pending")
             .map((inv) => {
-              const acceptUrl = `${baseUrl()}/team/accept/${inv.token}`;
-              const signupUrl = `${baseUrl()}/signup?invite_token=${encodeURIComponent(inv.token)}`;
+              const acceptUrl = `${getSiteUrl()}/team/accept/${inv.token}`;
+              const signupUrl = `${getSiteUrl()}/signup?invite_token=${encodeURIComponent(inv.token)}`;
               return (
                 <li
                   key={inv.id}

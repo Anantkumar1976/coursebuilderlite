@@ -2,6 +2,7 @@ import type { User } from "@supabase/supabase-js";
 
 import { isMasterAdminUser } from "@/lib/auth/admin";
 import { getMasterAdminPlanMetadata } from "@/lib/billing/master-admin-workspace";
+import { parseWorkspaceName } from "@/lib/billing/workspace-name";
 import type { Database } from "@/lib/supabase/database.types";
 import type { createClient } from "@/lib/supabase/server";
 
@@ -139,7 +140,7 @@ export async function syncAndValidateSubscriptionStatus(
   const metadata = getPlanMetadataFromUser(user);
   const { data: row, error: selectError } = await supabase
     .from("billing_subscriptions")
-    .select("id, user_id, status")
+    .select("id, user_id, status, workspace_name")
     .eq("subscription_id", metadata.subscriptionId)
     .maybeSingle();
   if (selectError) {
@@ -148,6 +149,8 @@ export async function syncAndValidateSubscriptionStatus(
       selectError.message,
     );
   }
+
+  const workspaceName = parseWorkspaceName(user.user_metadata?.workspace_name);
 
   if (!row?.id) {
     const statusFromMetadata =
@@ -162,6 +165,7 @@ export async function syncAndValidateSubscriptionStatus(
         provider: "paypal",
         plan_key: metadata.planKey,
         status: statusFromMetadata,
+        workspace_name: workspaceName,
       });
     if (insertError) {
       throw new BillingEnforcementError(
@@ -178,10 +182,15 @@ export async function syncAndValidateSubscriptionStatus(
     return;
   }
 
-  if (!row.user_id) {
+  if (!row.user_id || (workspaceName && !row.workspace_name)) {
     const { error: claimError } = await supabase
       .from("billing_subscriptions")
-      .update({ user_id: user.id })
+      .update({
+        ...(row.user_id ? {} : { user_id: user.id }),
+        ...(workspaceName && !row.workspace_name
+          ? { workspace_name: workspaceName }
+          : {}),
+      })
       .eq("id", row.id);
     if (claimError) {
       throw new BillingEnforcementError(

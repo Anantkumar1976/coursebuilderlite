@@ -6,6 +6,12 @@ import { useState } from "react";
 
 import { acceptTeamInvite } from "@/lib/actions/team";
 import {
+  clearSignupWorkspaceName,
+  readSignupWorkspaceName,
+  storeSignupWorkspaceName,
+  workspaceNameValidationError,
+} from "@/lib/billing/workspace-name";
+import {
   PAYPAL_PLAN_CONFIG,
   type PaypalPlanKey,
 } from "@/lib/paypal/subscriptions";
@@ -18,6 +24,7 @@ export type SignupTeamInvite = {
   authors_limit: number;
   monthly_exports_limit: number;
   subscription_id: string;
+  workspace_name: string | null;
 };
 
 type SignupFormState = {
@@ -94,10 +101,21 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
   const [subscriptionId, setSubscriptionId] = useState<string | null>(
     () => readSignupFormState(invite).subscriptionId,
   );
+  const [workspaceName, setWorkspaceName] = useState(() =>
+    invite?.workspace_name?.trim()
+      ? invite.workspace_name.trim()
+      : readSignupWorkspaceName(),
+  );
 
   async function handlePaypalSubscribe() {
     setError(null);
     setInfo(null);
+    const workspaceError = workspaceNameValidationError(workspaceName);
+    if (workspaceError) {
+      setError(workspaceError);
+      return;
+    }
+    storeSignupWorkspaceName(workspaceName);
     setPaypalPending(true);
     try {
       const response = await fetch("/api/billing/paypal/create-subscription", {
@@ -154,6 +172,18 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
       return;
     }
 
+    const resolvedWorkspaceName = invite
+      ? (invite.workspace_name?.trim() || workspaceName.trim())
+      : workspaceName.trim() || readSignupWorkspaceName();
+    if (!invite) {
+      const workspaceError = workspaceNameValidationError(resolvedWorkspaceName);
+      if (workspaceError) {
+        setError(workspaceError);
+        setPending(false);
+        return;
+      }
+    }
+
     const supabase = createClient();
     if (invite) {
       if (email.trim().toLowerCase() !== invite.email_normalized) {
@@ -179,6 +209,7 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
           monthly_exports_limit: invite.monthly_exports_limit,
           paypal_subscription_id: invite.subscription_id,
           subscription_status: "pending_activation" as const,
+          workspace_name: resolvedWorkspaceName || null,
         }
       : {
           subscription_provider: "paypal",
@@ -189,6 +220,7 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
           monthly_exports_limit: PAYPAL_PLAN_CONFIG[plan].monthlyExportsLimit,
           paypal_subscription_id: subscriptionId!,
           subscription_status: "pending_activation" as const,
+          workspace_name: resolvedWorkspaceName,
         };
 
     const { data, error: signError } = await supabase.auth.signUp({
@@ -216,11 +248,13 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
           return;
         }
       }
+      clearSignupWorkspaceName();
       router.push("/courses");
       router.refresh();
       return;
     }
     setAccountCreated(true);
+    clearSignupWorkspaceName();
     setInfo(
       "Check your email to confirm your account, then sign in. (You can disable email confirmation in Supabase Auth settings for local development.)",
     );
@@ -235,12 +269,40 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
         <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900 dark:border-teal-900 dark:bg-teal-950/40 dark:text-teal-100">
           <p className="font-medium">Team invite</p>
           <p className="mt-1 text-xs opacity-90">
+            {invite.workspace_name
+              ? `Workgroup: ${invite.workspace_name} · `
+              : null}
             Plan: {invitePlanConfig?.label ?? invite.plan_key} · {invite.authors_limit} authors ·{" "}
             {invite.monthly_exports_limit} exports/month (shared subscription).
           </p>
         </div>
       ) : (
         <>
+          <div className="flex flex-col gap-1.5">
+            <label
+              htmlFor="workspace_name"
+              className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
+            >
+              Company / workgroup name
+            </label>
+            <input
+              id="workspace_name"
+              name="workspace_name"
+              type="text"
+              required
+              minLength={2}
+              maxLength={80}
+              autoComplete="organization"
+              disabled={accountCreated}
+              value={workspaceName}
+              onChange={(event) => setWorkspaceName(event.target.value)}
+              placeholder="e.g. Acme Learning Team"
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-zinc-400 placeholder:text-zinc-400 focus:ring-2 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+            />
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Authors you invite will join this shared workspace and can edit all of its courses.
+            </p>
+          </div>
           <div className="flex flex-col gap-1.5">
             <label htmlFor="plan" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
               Plan

@@ -10,6 +10,11 @@ import {
   syncAndValidateSubscriptionStatus,
 } from "@/lib/billing/enforcement";
 import { ensureMasterAdminWorkspace } from "@/lib/billing/master-admin-workspace";
+import {
+  normalizeWorkspaceName,
+  parseWorkspaceName,
+  workspaceNameValidationError,
+} from "@/lib/billing/workspace-name";
 import { sendTeamInviteEmail } from "@/lib/email/team-invite-email";
 import { PAYPAL_PLAN_CONFIG, type PaypalPlanKey } from "@/lib/paypal/subscriptions";
 import { createAdminClient, hasAdminSupabaseEnv } from "@/lib/supabase/admin";
@@ -122,6 +127,15 @@ export async function createTeamInvite(formData: FormData) {
     throw new Error("Invalid plan on your account.");
   }
 
+  const { data: subRow } = await db
+    .from("billing_subscriptions")
+    .select("workspace_name")
+    .eq("subscription_id", metadata.subscriptionId)
+    .maybeSingle();
+  const workspaceName =
+    parseWorkspaceName(subRow?.workspace_name) ??
+    parseWorkspaceName(user.user_metadata?.workspace_name);
+
   const token = generateInviteToken();
   const expiresAt = inviteExpiryIso();
   const { error } = await db.from("billing_team_invites").insert({
@@ -133,6 +147,7 @@ export async function createTeamInvite(formData: FormData) {
     plan_key: planKey,
     authors_limit: metadata.authorsLimit,
     monthly_exports_limit: metadata.monthlyExportsLimit,
+    workspace_name: workspaceName,
     expires_at: expiresAt,
   });
   if (error) {
@@ -149,6 +164,7 @@ export async function createTeamInvite(formData: FormData) {
     planLabel,
     token,
     expiresAt,
+    workspaceName,
   });
 
   revalidatePath("/courses/team");
@@ -162,6 +178,97 @@ export async function createTeamInvite(formData: FormData) {
   redirect(
     `/courses/team?invite_sent=1&email_failed=1&email=${encodeURIComponent(emailRaw)}`,
   );
+}
+
+export async function updateWorkspaceName(formData: FormData) {
+  const rawName = formData.get("workspace_name");
+  const validationError = workspaceNameValidationError(rawName);
+  if (validationError) throw new Error(validationError);
+  const workspaceName = normalizeWorkspaceName(rawName);
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not signed in.");
+
+  const masterAdmin = isMasterAdminUser(user);
+  if (masterAdmin) {
+    if (!hasAdminSupabaseEnv()) {
+      throw new Error(
+        "Server is missing SUPABASE_SERVICE_ROLE_KEY; cannot update the admin workspace.",
+      );
+    }
+    await ensureMasterAdminWorkspace(user);
+  }
+
+  let metadata;
+  try {
+    metadata = getPlanMetadataFromUser(user);
+  } catch {
+    throw new Error("Only subscribers can update company / workgroup details.");
+  }
+
+  await assertCanManageSubscription(metadata.subscriptionId);
+
+  const db = hasAdminSupabaseEnv() ? createAdminClient() : supabase;
+  const { data: subRow, error: subErr } = await db
+    .from("billing_subscriptions")
+    .select("id, user_id")
+    .eq("subscription_id", metadata.subscriptionId)
+    .maybeSingle();
+  if (subErr) throw new Error(subErr.message);
+  if (!subRow?.id) {
+    throw new Error("Subscription record not found. Try refreshing and signing in again.");
+  }
+
+  // RLS only lets the billed owner update; service role covers teammates / master admin.
+  const { error: updateErr } = await db
+    .from("billing_subscriptions")
+    .update({ workspace_name: workspaceName })
+    .eq("id", subRow.id);
+  if (updateErr) throw new Error(updateErr.message);
+
+  await db
+    .from("billing_team_invites")
+    .update({ workspace_name: workspaceName })
+    .eq("subscription_id", metadata.subscriptionId)
+    .eq("status", "pending");
+
+  await supabase.auth.updateUser({
+    data: {
+      ...(user.user_metadata ?? {}),
+      workspace_name: workspaceName,
+    },
+  });
+
+  if (hasAdminSupabaseEnv()) {
+    const admin = createAdminClient();
+    const { data: memRows } = await admin
+      .from("billing_subscription_memberships")
+      .select("user_id")
+      .eq("subscription_id", metadata.subscriptionId);
+    const memberIds = new Set((memRows ?? []).map((m) => m.user_id));
+    if (subRow.user_id) memberIds.add(subRow.user_id);
+    memberIds.delete(user.id);
+
+    for (const memberId of memberIds) {
+      const { data: target } = await admin.auth.admin.getUserById(memberId);
+      if (!target.user) continue;
+      const prevMeta = target.user.user_metadata ?? {};
+      await admin.auth.admin.updateUserById(memberId, {
+        user_metadata: {
+          ...prevMeta,
+          workspace_name: workspaceName,
+        },
+      });
+    }
+  }
+
+  revalidatePath("/courses");
+  revalidatePath("/courses/team");
+  revalidatePath("/admin");
+  redirect("/courses/team?workspace_saved=1");
 }
 
 export async function revokeTeamInvite(formData: FormData) {
@@ -239,6 +346,7 @@ export async function removeTeamMember(formData: FormData) {
       monthly_exports_limit: null,
       paypal_subscription_id: null,
       subscription_status: null,
+      workspace_name: null,
     },
   });
   revalidatePath("/courses/team");
@@ -280,7 +388,7 @@ export async function acceptTeamInvite(token: string) {
 
   const { data: subRow } = await admin
     .from("billing_subscriptions")
-    .select("status")
+    .select("status, workspace_name")
     .eq("subscription_id", invite.subscription_id)
     .maybeSingle();
   if (
@@ -290,6 +398,10 @@ export async function acceptTeamInvite(token: string) {
   ) {
     throw new Error("This subscription is no longer active.");
   }
+
+  const workspaceName =
+    parseWorkspaceName(invite.workspace_name) ??
+    parseWorkspaceName(subRow?.workspace_name);
 
   const existingSub =
     typeof user.user_metadata?.paypal_subscription_id === "string"
@@ -327,6 +439,7 @@ export async function acceptTeamInvite(token: string) {
       monthly_exports_limit: invite.monthly_exports_limit,
       paypal_subscription_id: invite.subscription_id,
       subscription_status: "active",
+      workspace_name: workspaceName,
     },
   });
 

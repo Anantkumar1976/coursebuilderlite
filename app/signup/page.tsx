@@ -39,6 +39,7 @@ export default async function SignupPage({
     authors_limit: number;
     monthly_exports_limit: number;
     subscription_id: string;
+    workspace_name: string | null;
   } | null = null;
   let inviteError: string | null = null;
 
@@ -51,7 +52,7 @@ export default async function SignupPage({
       const { data: inv, error } = await admin
         .from("billing_team_invites")
         .select(
-          "token, email_normalized, plan_key, authors_limit, monthly_exports_limit, subscription_id, status, expires_at",
+          "token, email_normalized, plan_key, authors_limit, monthly_exports_limit, subscription_id, workspace_name, status, expires_at",
         )
         .eq("token", inviteToken)
         .maybeSingle();
@@ -62,6 +63,15 @@ export default async function SignupPage({
       } else if (isTeamInviteExpired(inv.expires_at)) {
         inviteError = "This invite has expired.";
       } else {
+        let workspaceName = inv.workspace_name?.trim() || null;
+        if (!workspaceName) {
+          const { data: sub } = await admin
+            .from("billing_subscriptions")
+            .select("workspace_name")
+            .eq("subscription_id", inv.subscription_id)
+            .maybeSingle();
+          workspaceName = sub?.workspace_name?.trim() || null;
+        }
         invitePayload = {
           token: inv.token,
           email_normalized: inv.email_normalized,
@@ -69,6 +79,7 @@ export default async function SignupPage({
           authors_limit: inv.authors_limit,
           monthly_exports_limit: inv.monthly_exports_limit,
           subscription_id: inv.subscription_id,
+          workspace_name: workspaceName,
         };
       }
     }

@@ -45,8 +45,11 @@ export default async function CoursesPage() {
     .select("id, title, status, updated_at, user_id")
     .order("updated_at", { ascending: false });
 
-  const [{ count: exportsUsed, error: exportsCountError }, { count: authorsUsed, error: authorsCountError }] =
-    await Promise.all([
+  const [
+    { count: exportsUsed, error: exportsCountError },
+    { count: authorsUsed, error: authorsCountError },
+    subscriptionWorkspace,
+  ] = await Promise.all([
       supabase
         .from("billing_export_events")
         .select("id", { count: "exact", head: true })
@@ -58,7 +61,21 @@ export default async function CoursesPage() {
             .select("id", { count: "exact", head: true })
             .eq("subscription_id", subscriptionId)
         : Promise.resolve({ count: null, error: null }),
+      subscriptionId
+        ? supabase
+            .from("billing_subscriptions")
+            .select("workspace_name")
+            .eq("subscription_id", subscriptionId)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
     ]);
+
+  const workspaceLabel =
+    subscriptionWorkspace.data?.workspace_name?.trim() ||
+    (typeof user?.user_metadata?.workspace_name === "string"
+      ? user.user_metadata.workspace_name.trim()
+      : "") ||
+    "";
 
   if (error) {
     return (
@@ -76,6 +93,11 @@ export default async function CoursesPage() {
       <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Team courses</h1>
+          {workspaceLabel ? (
+            <p className="mt-1 text-base font-medium text-zinc-800 dark:text-zinc-200">
+              {workspaceLabel}
+            </p>
+          ) : null}
           <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
             Shared workspace for your subscription — all authors can view and edit these courses.
           </p>

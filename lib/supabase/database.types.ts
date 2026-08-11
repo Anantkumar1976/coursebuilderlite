@@ -113,6 +113,7 @@ export type Database = {
           plan_key: string;
           authors_limit: number;
           monthly_exports_limit: number;
+          workspace_name: string | null;
           expires_at: string;
           accepted_user_id: string | null;
           accepted_at: string | null;
@@ -128,6 +129,7 @@ export type Database = {
           plan_key: string;
           authors_limit: number;
           monthly_exports_limit: number;
+          workspace_name?: string | null;
           expires_at: string;
           accepted_user_id?: string | null;
           accepted_at?: string | null;
@@ -143,6 +145,7 @@ export type Database = {
           plan_key?: string;
           authors_limit?: number;
           monthly_exports_limit?: number;
+          workspace_name?: string | null;
           expires_at?: string;
           accepted_user_id?: string | null;
           accepted_at?: string | null;
@@ -157,6 +160,7 @@ export type Database = {
           subscription_id: string;
           provider: string;
           plan_key: string | null;
+          workspace_name: string | null;
           status: string;
           last_event_type: string | null;
           activated_at: string | null;
@@ -170,6 +174,7 @@ export type Database = {
           subscription_id: string;
           provider?: string;
           plan_key?: string | null;
+          workspace_name?: string | null;
           status?: string;
           last_event_type?: string | null;
           activated_at?: string | null;
@@ -183,6 +188,7 @@ export type Database = {
           subscription_id?: string;
           provider?: string;
           plan_key?: string | null;
+          workspace_name?: string | null;
           status?: string;
           last_event_type?: string | null;
           activated_at?: string | null;
