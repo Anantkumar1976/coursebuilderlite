@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { acceptTeamInvite } from "@/lib/actions/team";
+import { getSiteUrl } from "@/lib/auth/site-url";
 import {
   clearSignupWorkspaceName,
   readSignupWorkspaceName,
@@ -223,11 +224,17 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
           workspace_name: resolvedWorkspaceName,
         };
 
+    const nextAfterConfirm = invite
+      ? `/team/accept/${invite.token}`
+      : "/courses";
+    const emailRedirectTo = `${getSiteUrl()}/auth/callback?next=${encodeURIComponent(nextAfterConfirm)}`;
+
     const { data, error: signError } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: meta,
+        emailRedirectTo,
       },
     });
     setPending(false);
@@ -256,7 +263,9 @@ export function SignupForm({ invite }: { invite?: SignupTeamInvite | null }) {
     setAccountCreated(true);
     clearSignupWorkspaceName();
     setInfo(
-      "Check your email to confirm your account, then sign in. (You can disable email confirmation in Supabase Auth settings for local development.)",
+      invite
+        ? "Check your email to confirm your account. After confirming, you will join the team automatically. If the link expires, sign in and open the Accept (signed in) invite link."
+        : "Check your email to confirm your account, then sign in.",
     );
   }
 

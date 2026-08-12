@@ -46,6 +46,13 @@ export default async function CoursesLayout({
         await supabase.auth.signOut();
         redirect("/login?error=subscription-inactive");
       }
+      if (
+        error instanceof BillingEnforcementError &&
+        error.code === "team-invite-pending"
+      ) {
+        await supabase.auth.signOut();
+        redirect("/login?error=team-invite-pending");
+      }
       throw error;
     }
   }

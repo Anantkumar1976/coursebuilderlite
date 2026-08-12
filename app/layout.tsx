@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { Inter, Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
+
+import { AuthRedirectError } from "@/components/auth/auth-redirect-error";
+
 import "./globals.css";
 
 // Body / UI font — modern neo-grotesque, in the spirit of Graphik.
@@ -42,6 +45,7 @@ export default function RootLayout({
         className="min-h-full flex flex-col font-sans"
         suppressHydrationWarning
       >
+        <AuthRedirectError />
         {children}
       </body>
     </html>

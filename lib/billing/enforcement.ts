@@ -20,6 +20,7 @@ export class BillingEnforcementError extends Error {
     | "missing-plan-metadata"
     | "invalid-plan-metadata"
     | "subscription-inactive"
+    | "team-invite-pending"
     | "author-limit-reached"
     | "export-limit-reached"
     | "enforcement-query-failed";
@@ -152,7 +153,25 @@ export async function syncAndValidateSubscriptionStatus(
 
   const workspaceName = parseWorkspaceName(user.user_metadata?.workspace_name);
 
+  const { data: membership, error: membershipError } = await supabase
+    .from("billing_subscription_memberships")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("subscription_id", metadata.subscriptionId)
+    .maybeSingle();
+  if (membershipError) {
+    throw new BillingEnforcementError(
+      "enforcement-query-failed",
+      membershipError.message,
+    );
+  }
+
   if (!row?.id) {
+    // Teammate whose membership exists but subscription row was not visible (legacy RLS).
+    if (membership?.id) {
+      return;
+    }
+
     const statusFromMetadata =
       typeof user.user_metadata?.subscription_status === "string"
         ? user.user_metadata.subscription_status
@@ -168,6 +187,13 @@ export async function syncAndValidateSubscriptionStatus(
         workspace_name: workspaceName,
       });
     if (insertError) {
+      // Subscription already owned by the invite sender — user still needs to accept the invite.
+      if (insertError.code === "23505") {
+        throw new BillingEnforcementError(
+          "team-invite-pending",
+          "Your account is ready, but you still need to accept your team invite link to join the workspace.",
+        );
+      }
       throw new BillingEnforcementError(
         "enforcement-query-failed",
         insertError.message,

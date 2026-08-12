@@ -16,6 +16,12 @@ function getLoginErrorMessage(code: string | undefined) {
   if (code === "subscription-inactive") {
     return "Your subscription is inactive. Please reactivate it to continue.";
   }
+  if (code === "team-invite-pending") {
+    return "Your account exists, but you have not joined the team yet. Open the Accept (signed in) link from your invite email or ask your teammate to resend the invite.";
+  }
+  if (code === "email-link-expired") {
+    return "That confirmation link is invalid or has expired. Sign in if you already confirmed, or ask your admin to resend the confirmation email from Supabase.";
+  }
   if (code === "auth-callback") {
     return "That sign-in link is invalid or has expired. Request a new password reset link or sign in again.";
   }
