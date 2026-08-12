@@ -33,7 +33,14 @@ export function LoginForm({ redirectNext }: { redirectNext?: string | null }) {
         password,
       });
       if (signError) {
-        setError(signError.message);
+        const msg = signError.message.toLowerCase();
+        if (msg.includes("email not confirmed")) {
+          setError(
+            "Confirm your email before signing in. Check your inbox for the confirmation link (it must open your production site, not localhost).",
+          );
+        } else {
+          setError(signError.message);
+        }
         return;
       }
       router.push(getSafeInternalPath(redirectNext));
