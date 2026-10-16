@@ -12,7 +12,7 @@ export function isEmailConfigured() {
 export function getEmailFromAddress() {
   const configured = process.env.RESEND_FROM?.trim();
   if (configured) return configured;
-  return "Course Builder Light <onboarding@resend.dev>";
+  return "Course Builder Lite <onboarding@resend.dev>";
 }
 
 export async function sendEmail(input: SendEmailInput) {
