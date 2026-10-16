@@ -1,4 +1,4 @@
-import DOMPurify from "isomorphic-dompurify";
+import sanitizeHtml from "sanitize-html";
 
 const ALLOWED_TAGS = [
   "p",
@@ -21,10 +21,10 @@ const ALLOWED_TAGS = [
 
 /** Safe HTML for learner-facing body content (matches Tiptap output). */
 export function sanitizeBodyHtml(html: string): string {
-  return DOMPurify.sanitize(html, {
-    ALLOWED_TAGS,
-    ALLOWED_ATTR: ["href", "target", "rel", "style", "class"],
-    ALLOW_DATA_ATTR: false,
+  return sanitizeHtml(html, {
+    allowedTags: ALLOWED_TAGS,
+    allowedAttributes: { "*": ["href", "target", "rel", "style", "class"] },
+    allowedSchemes: ["http", "https", "mailto", "tel"],
   });
 }
 
