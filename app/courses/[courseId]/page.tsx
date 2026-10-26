@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { ExportButton } from "@/components/course-export/export-button";
 import { CourseAssessmentAttemptsField } from "@/components/course-settings/course-assessment-attempts-field";
 import { CourseAttemptsField } from "@/components/course-settings/course-attempts-field";
 import { CourseBannerUpload } from "@/components/course-settings/course-banner-upload";
@@ -18,7 +19,14 @@ import {
 import { updateCourseAppearanceSettings } from "@/lib/actions/course-appearance";
 import { getSignedUrlsForAssetIds } from "@/lib/assets/signed-urls";
 import { parseThemeColors, parseThemeFonts } from "@/lib/course-theme/theme";
+import type { ExportFormat } from "@/lib/scorm/build-package";
 import { createClient } from "@/lib/supabase/server";
+
+const EXPORT_BUTTONS = [
+  { format: "scorm12", label: "Download SCORM 1.2" },
+  { format: "scorm2004", label: "Download SCORM 2004" },
+  { format: "standalone", label: "Download Standalone HTML" },
+] as const satisfies readonly { format: ExportFormat; label: string }[];
 
 function settingsMessage(
   error: string | null,
@@ -536,24 +544,15 @@ export default async function CourseDetailPage({
           >
             Preview course
           </Link>
-          <a
-            href={`/api/courses/${courseId}/export/scorm`}
-            className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
-          >
-            Download SCORM 1.2
-          </a>
-          <a
-            href={`/api/courses/${courseId}/export/scorm-2004`}
-            className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
-          >
-            Download SCORM 2004
-          </a>
-          <a
-            href={`/api/courses/${courseId}/export/standalone`}
-            className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
-          >
-            Download Standalone HTML
-          </a>
+          {EXPORT_BUTTONS.map(({ format, label }) => (
+            <ExportButton
+              key={format}
+              courseId={courseId}
+              format={format}
+              label={label}
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-50 disabled:cursor-wait disabled:opacity-70 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+            />
+          ))}
         </div>
       </section>
     </main>

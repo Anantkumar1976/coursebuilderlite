@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { compressImageForUpload } from "@/lib/assets/compress-image";
 import { buildAssetStoragePath } from "@/lib/assets/storage-path";
 import type { PageContentV1 } from "@/lib/page-builder";
 import { createClient } from "@/lib/supabase/client";
@@ -154,19 +155,20 @@ export function TextImageImagePanel({
             ? crypto.randomUUID()
             : `a-${Date.now()}`;
 
+        const upload = await compressImageForUpload(file);
         const storagePath = buildAssetStoragePath(
           user.id,
           courseId,
           assetId,
-          file.name,
+          upload.name,
         );
 
         const { error: upErr } = await supabase.storage
           .from("assets")
-          .upload(storagePath, file, {
+          .upload(storagePath, upload, {
             cacheControl: "3600",
             upsert: false,
-            contentType: file.type || undefined,
+            contentType: upload.type || undefined,
           });
         if (upErr) {
           setUploadError(upErr.message);
@@ -184,9 +186,9 @@ export function TextImageImagePanel({
           course_id: courseId,
           bucket: "assets",
           storage_path: storagePath,
-          filename: file.name,
-          mime_type: file.type || null,
-          bytes: file.size,
+          filename: upload.name,
+          mime_type: upload.type || null,
+          bytes: upload.size,
         });
 
         if (insErr) {
@@ -209,9 +211,9 @@ export function TextImageImagePanel({
           id: assetId,
           bucket: "assets",
           storage_path: storagePath,
-          filename: file.name,
-          mime_type: file.type || null,
-          bytes: file.size,
+          filename: upload.name,
+          mime_type: upload.type || null,
+          bytes: upload.size,
         });
       } catch {
         if (uploadObjectUrlRef.current) {

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { setCourseBannerAsset } from "@/lib/actions/course-appearance";
+import { compressImageForUpload } from "@/lib/assets/compress-image";
 import { buildAssetStoragePath } from "@/lib/assets/storage-path";
 import { createClient } from "@/lib/supabase/client";
 
@@ -50,19 +51,22 @@ export function CourseBannerUpload({
           typeof crypto !== "undefined" && crypto.randomUUID
             ? crypto.randomUUID()
             : `b-${Date.now()}`;
+        const upload = await compressImageForUpload(file, {
+          maxDimension: 2400,
+        });
         const storagePath = buildAssetStoragePath(
           user.id,
           courseId,
           assetId,
-          file.name,
+          upload.name,
         );
 
         const { error: upErr } = await supabase.storage
           .from("assets")
-          .upload(storagePath, file, {
+          .upload(storagePath, upload, {
             cacheControl: "3600",
             upsert: false,
-            contentType: file.type || undefined,
+            contentType: upload.type || undefined,
           });
         if (upErr) {
           setError(upErr.message);
@@ -75,9 +79,9 @@ export function CourseBannerUpload({
           course_id: courseId,
           bucket: "assets",
           storage_path: storagePath,
-          filename: file.name,
-          mime_type: file.type || null,
-          bytes: file.size,
+          filename: upload.name,
+          mime_type: upload.type || null,
+          bytes: upload.size,
         });
 
         if (insErr) {
