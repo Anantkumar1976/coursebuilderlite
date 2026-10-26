@@ -2,13 +2,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { collectImageAssetIdsFromPages } from "@/lib/assets/collect-image-asset-ids";
 import { extensionFromFilename } from "@/lib/assets/storage-path";
+import type { NavigationFlow } from "@/lib/course-player/navigation-flow";
+import type { ThemeColors, ThemeFonts } from "@/lib/course-theme/theme";
 import { parsePageContent, resolvePageAudioSrcForExport } from "@/lib/page-builder";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
-import {
-  buildScorm2004DriverWithCourseSettings,
-  buildScormDriverWithCourseSettings,
-} from "./apply-course-settings";
+import { buildScormDriver } from "./build-driver";
 import { buildScormIndexHtml } from "./build-index-html";
 import { buildImsManifest, buildImsManifest2004 } from "./build-manifest";
 import { pageContentToHtml } from "./page-to-html";
@@ -25,6 +24,16 @@ export type PageRow = {
   title: string;
   content: Json;
 };
+
+export interface LessonRow {
+  title: string;
+  pages: PageRow[];
+}
+
+export interface ReferenceRow {
+  label: string;
+  assetId: string;
+}
 
 export interface PackageTextFile {
   path: string;
@@ -46,7 +55,7 @@ export interface PackagePlan {
 export async function buildPackagePlan(options: {
   courseTitle: string;
   courseId: string;
-  pages: PageRow[];
+  lessons: LessonRow[];
   supabase: SupabaseClient<Database>;
   locale: string;
   scormPassingScorePercent: number;
@@ -56,18 +65,27 @@ export async function buildPackagePlan(options: {
   courseDescription: string | null;
   estimatedDurationMinutes: number | null;
   customCss: string | null;
+  bannerAssetId: string | null;
+  references: ReferenceRow[];
+  themeFonts: ThemeFonts;
+  themeColors: ThemeColors;
+  navigationFlow: NavigationFlow;
   format: ExportFormat;
 }): Promise<PackagePlan> {
   const { format } = options;
-  const assetIds = collectImageAssetIdsFromPages(options.pages);
+  const pages = options.lessons.flatMap((lesson) => lesson.pages);
+  const assetIds = new Set(collectImageAssetIdsFromPages(pages));
+  if (options.bannerAssetId) assetIds.add(options.bannerAssetId);
+  for (const ref of options.references) assetIds.add(ref.assetId);
+
   const scormRelative: Record<string, string> = {};
   const mediaFiles: PackageMediaFile[] = [];
 
-  if (assetIds.length > 0) {
+  if (assetIds.size > 0) {
     const { data } = await options.supabase
       .from("assets")
       .select("id, bucket, storage_path, filename")
-      .in("id", assetIds);
+      .in("id", [...assetIds]);
     for (const row of data ?? []) {
       const path = `media/${row.id}${extensionFromFilename(row.filename)}`;
       scormRelative[row.id] = path;
@@ -80,15 +98,23 @@ export async function buildPackagePlan(options: {
   }
 
   const pageIndexById = Object.fromEntries(
-    options.pages.map((row, idx) => [row.id, idx]),
+    pages.map((row, idx) => [row.id, idx]),
   );
-  const parsed = options.pages.map((p) => {
-    const content = parsePageContent(p.content);
-    return {
-      title: p.title || "Untitled page",
-      innerHtml: pageContentToHtml(content, { scormRelative, pageIndexById }),
-      pageAudioSrc: resolvePageAudioSrcForExport(content, scormRelative),
-    };
+  const lessons = options.lessons.map((lesson) => ({
+    title: lesson.title,
+    pages: lesson.pages.map((p) => {
+      const content = parsePageContent(p.content);
+      return {
+        title: p.title || "Untitled page",
+        innerHtml: pageContentToHtml(content, { scormRelative, pageIndexById }),
+        pageAudioSrc: resolvePageAudioSrcForExport(content, scormRelative),
+        isCompletion: content.template === "course_completion",
+      };
+    }),
+  }));
+  const references = options.references.flatMap((ref) => {
+    const href = scormRelative[ref.assetId];
+    return href ? [{ label: ref.label, href }] : [];
   });
 
   const manifestSummary =
@@ -104,16 +130,11 @@ export async function buildPackagePlan(options: {
     estimatedDurationMinutes: options.estimatedDurationMinutes,
   };
 
-  const driverJs =
-    format === "scorm2004"
-      ? buildScorm2004DriverWithCourseSettings(
-          options.scormPassingScorePercent,
-          options.assessmentAttemptsLimit,
-        )
-      : buildScormDriverWithCourseSettings(
-          options.scormPassingScorePercent,
-          options.assessmentAttemptsLimit,
-        );
+  const driverJs = buildScormDriver(format, {
+    passingScore: options.scormPassingScorePercent,
+    assessmentAttemptsLimit: options.assessmentAttemptsLimit,
+    navigationFlow: options.navigationFlow,
+  });
 
   const textFiles: PackageTextFile[] = [];
   if (format !== "standalone") {
@@ -128,9 +149,18 @@ export async function buildPackagePlan(options: {
   textFiles.push(
     {
       path: "index.html",
-      content: buildScormIndexHtml(options.courseTitle, parsed, {
+      content: buildScormIndexHtml(options.courseTitle, lessons, {
         lang: options.locale,
         customCss: options.customCss,
+        description: options.courseDescription,
+        estimatedDurationMinutes: options.estimatedDurationMinutes,
+        bannerSrc: options.bannerAssetId
+          ? (scormRelative[options.bannerAssetId] ?? null)
+          : null,
+        references,
+        themeFonts: options.themeFonts,
+        themeColors: options.themeColors,
+        navigationFlow: options.navigationFlow,
       }),
     },
     { path: "scormdriver.js", content: driverJs },

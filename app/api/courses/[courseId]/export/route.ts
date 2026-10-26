@@ -7,6 +7,8 @@ import {
   recordExportEvent,
 } from "@/lib/billing/enforcement";
 import { parseAttemptsLimit } from "@/lib/course-player/attempts";
+import { parseNavigationFlow } from "@/lib/course-player/navigation-flow";
+import { parseThemeColors, parseThemeFonts } from "@/lib/course-theme/theme";
 import { reportScormExportFailure } from "@/lib/monitoring/errors";
 import {
   buildPackagePlan,
@@ -53,7 +55,7 @@ export async function POST(
     const { data: course, error } = await supabase
       .from("courses")
       .select(
-        "id, title, description, locale, scorm_passing_score_percent, assessment_attempts_limit, manifest_description, estimated_duration_minutes, custom_css",
+        "id, title, description, locale, scorm_passing_score_percent, assessment_attempts_limit, manifest_description, estimated_duration_minutes, custom_css, banner_asset_id, theme_fonts, theme_colors, navigation_flow",
       )
       .eq("id", courseId)
       .maybeSingle();
@@ -62,33 +64,44 @@ export async function POST(
       return new NextResponse("Course not found", { status: 404 });
     }
 
-    const [{ data: lessonRows }, { data: pageRows }] = await Promise.all([
-      supabase
-        .from("lessons")
-        .select("id, sort_order")
-        .eq("course_id", courseId),
-      supabase
-        .from("pages")
-        .select("id, title, content, sort_order, lesson_id")
-        .eq("course_id", courseId),
-    ]);
+    const [{ data: lessonRows }, { data: pageRows }, { data: refRows }] =
+      await Promise.all([
+        supabase
+          .from("lessons")
+          .select("id, title")
+          .eq("course_id", courseId)
+          .order("sort_order", { ascending: true }),
+        supabase
+          .from("pages")
+          .select("id, title, content, lesson_id")
+          .eq("course_id", courseId)
+          .order("sort_order", { ascending: true }),
+        supabase
+          .from("course_reference_materials")
+          .select("label, asset_id")
+          .eq("course_id", courseId)
+          .order("sort_order", { ascending: true }),
+      ]);
 
-    const lessonOrder = new Map(
-      (lessonRows ?? []).map((l) => [l.id, l.sort_order] as const),
-    );
-    const pages = [...(pageRows ?? [])]
-      .sort((a, b) => {
-        const la = lessonOrder.get(a.lesson_id) ?? 0;
-        const lb = lessonOrder.get(b.lesson_id) ?? 0;
-        if (la !== lb) return la - lb;
-        return a.sort_order - b.sort_order;
-      })
-      .map((p) => ({ id: p.id, title: p.title, content: p.content }));
+    const lessons = (lessonRows ?? []).map((lesson) => ({
+      title: lesson.title,
+      pages: (pageRows ?? [])
+        .filter((p) => p.lesson_id === lesson.id)
+        .map((p) => ({ id: p.id, title: p.title, content: p.content })),
+    }));
 
     const plan = await buildPackagePlan({
       courseTitle: course.title,
       courseId: course.id,
-      pages,
+      lessons,
+      bannerAssetId: course.banner_asset_id,
+      references: (refRows ?? []).map((r) => ({
+        label: r.label,
+        assetId: r.asset_id,
+      })),
+      themeFonts: parseThemeFonts(course.theme_fonts),
+      themeColors: parseThemeColors(course.theme_colors),
+      navigationFlow: parseNavigationFlow(course.navigation_flow),
       supabase,
       locale: course.locale,
       scormPassingScorePercent: course.scorm_passing_score_percent,
