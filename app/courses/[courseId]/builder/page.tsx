@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { ExportButton } from "@/components/course-export/export-button";
 import { parsePageContent } from "@/lib/page-builder";
 import { createClient } from "@/lib/supabase/server";
 
@@ -85,12 +86,12 @@ export default async function CourseBuilderPage({
           >
             Preview
           </Link>
-          <a
-            href={`/api/courses/${courseId}/export/scorm`}
-            className="text-sm font-medium text-zinc-900 underline-offset-4 hover:underline dark:text-zinc-50"
-          >
-            SCORM 1.2
-          </a>
+          <ExportButton
+            courseId={courseId}
+            format="scorm12"
+            label="SCORM 1.2"
+            className="text-sm font-medium text-zinc-900 underline-offset-4 hover:underline disabled:cursor-wait disabled:opacity-70 dark:text-zinc-50"
+          />
         </div>
       </div>
       <PageBuilder

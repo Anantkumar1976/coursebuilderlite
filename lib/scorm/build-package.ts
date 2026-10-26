@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import JSZip from "jszip";
 
 import { collectImageAssetIdsFromPages } from "@/lib/assets/collect-image-asset-ids";
 import { extensionFromFilename } from "@/lib/assets/storage-path";
@@ -14,13 +13,37 @@ import { buildScormIndexHtml } from "./build-index-html";
 import { buildImsManifest, buildImsManifest2004 } from "./build-manifest";
 import { pageContentToHtml } from "./page-to-html";
 
+export const EXPORT_FORMATS = ["scorm12", "scorm2004", "standalone"] as const;
+export type ExportFormat = (typeof EXPORT_FORMATS)[number];
+
+export function isExportFormat(value: unknown): value is ExportFormat {
+  return (EXPORT_FORMATS as readonly unknown[]).includes(value);
+}
+
 export type PageRow = {
   id: string;
   title: string;
   content: Json;
 };
 
-export async function buildScormZipBuffer(options: {
+export interface PackageTextFile {
+  path: string;
+  content: string;
+}
+
+export interface PackageMediaFile {
+  path: string;
+  bucket: string;
+  storagePath: string;
+}
+
+/** Everything needed to assemble the zip; media bytes are fetched separately. */
+export interface PackagePlan {
+  textFiles: PackageTextFile[];
+  mediaFiles: PackageMediaFile[];
+}
+
+export async function buildPackagePlan(options: {
   courseTitle: string;
   courseId: string;
   pages: PageRow[];
@@ -33,80 +56,53 @@ export async function buildScormZipBuffer(options: {
   courseDescription: string | null;
   estimatedDurationMinutes: number | null;
   customCss: string | null;
-  format?: "scorm12" | "scorm2004" | "standalone";
-}): Promise<Buffer> {
-  const format = options.format ?? "scorm12";
+  format: ExportFormat;
+}): Promise<PackagePlan> {
+  const { format } = options;
   const assetIds = collectImageAssetIdsFromPages(options.pages);
   const scormRelative: Record<string, string> = {};
-  const packageFiles: string[] = [];
+  const mediaFiles: PackageMediaFile[] = [];
 
-  let assetRows: {
-    id: string;
-    bucket: string;
-    storage_path: string;
-    filename: string;
-  }[] = [];
   if (assetIds.length > 0) {
     const { data } = await options.supabase
       .from("assets")
       .select("id, bucket, storage_path, filename")
       .in("id", assetIds);
-    assetRows = data ?? [];
-  }
-
-  for (const row of assetRows) {
-    const ext = extensionFromFilename(row.filename);
-    const zipPath = `media/${row.id}${ext}`;
-    scormRelative[row.id] = zipPath;
-    packageFiles.push(zipPath);
+    for (const row of data ?? []) {
+      const path = `media/${row.id}${extensionFromFilename(row.filename)}`;
+      scormRelative[row.id] = path;
+      mediaFiles.push({
+        path,
+        bucket: row.bucket,
+        storagePath: row.storage_path,
+      });
+    }
   }
 
   const pageIndexById = Object.fromEntries(
     options.pages.map((row, idx) => [row.id, idx]),
   );
-  const parsed: {
-    title: string;
-    innerHtml: string;
-    pageAudioSrc: string | null;
-  }[] = options.pages.map((p) => {
-      const content = parsePageContent(p.content);
-      return {
-        title: p.title || "Untitled page",
-        innerHtml: pageContentToHtml(content, {
-          scormRelative,
-          pageIndexById,
-        }),
-        pageAudioSrc: resolvePageAudioSrcForExport(content, scormRelative),
-      };
-    });
+  const parsed = options.pages.map((p) => {
+    const content = parsePageContent(p.content);
+    return {
+      title: p.title || "Untitled page",
+      innerHtml: pageContentToHtml(content, { scormRelative, pageIndexById }),
+      pageAudioSrc: resolvePageAudioSrcForExport(content, scormRelative),
+    };
+  });
 
   const manifestSummary =
     options.manifestDescription?.trim() ||
     options.courseDescription?.trim() ||
     null;
-
-  const indexHtml = buildScormIndexHtml(options.courseTitle, parsed, {
-    lang: options.locale,
-    customCss: options.customCss,
-  });
-  const manifest =
-    format === "scorm2004"
-      ? buildImsManifest2004({
-          courseTitle: options.courseTitle,
-          manifestId: `cbl-${options.courseId}`,
-          packageFiles,
-          locale: options.locale,
-          manifestSummary,
-          estimatedDurationMinutes: options.estimatedDurationMinutes,
-        })
-      : buildImsManifest({
-          courseTitle: options.courseTitle,
-          manifestId: `cbl-${options.courseId}`,
-          packageFiles,
-          locale: options.locale,
-          manifestSummary,
-          estimatedDurationMinutes: options.estimatedDurationMinutes,
-        });
+  const manifestOptions = {
+    courseTitle: options.courseTitle,
+    manifestId: `cbl-${options.courseId}`,
+    packageFiles: mediaFiles.map((m) => m.path),
+    locale: options.locale,
+    manifestSummary,
+    estimatedDurationMinutes: options.estimatedDurationMinutes,
+  };
 
   const driverJs =
     format === "scorm2004"
@@ -119,57 +115,45 @@ export async function buildScormZipBuffer(options: {
           options.assessmentAttemptsLimit,
         );
 
-  const zip = new JSZip();
-
-  for (const row of assetRows) {
-    const zipPath = scormRelative[row.id];
-    if (!zipPath) continue;
-    const { data: blob, error } = await options.supabase.storage
-      .from(row.bucket)
-      .download(row.storage_path);
-    if (error || !blob) continue;
-    const buf = Buffer.from(await blob.arrayBuffer());
-    zip.file(zipPath, buf);
-  }
-
+  const textFiles: PackageTextFile[] = [];
   if (format !== "standalone") {
-    zip.file("imsmanifest.xml", manifest);
+    textFiles.push({
+      path: "imsmanifest.xml",
+      content:
+        format === "scorm2004"
+          ? buildImsManifest2004(manifestOptions)
+          : buildImsManifest(manifestOptions),
+    });
   }
-  zip.file("index.html", indexHtml);
-  zip.file("scormdriver.js", driverJs);
+  textFiles.push(
+    {
+      path: "index.html",
+      content: buildScormIndexHtml(options.courseTitle, parsed, {
+        lang: options.locale,
+        customCss: options.customCss,
+      }),
+    },
+    { path: "scormdriver.js", content: driverJs },
+  );
 
-  return await zip.generateAsync({
-    type: "nodebuffer",
-    compression: "DEFLATE",
-  });
+  return { textFiles, mediaFiles };
 }
 
-export function scormZipFilename(courseTitle: string): string {
+const FILENAME_SUFFIX: Record<ExportFormat, string> = {
+  scorm12: "scorm12",
+  scorm2004: "scorm2004",
+  standalone: "standalone-html",
+};
+
+export function exportZipFilename(
+  courseTitle: string,
+  format: ExportFormat,
+): string {
   const base = courseTitle
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/gi, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 48);
-  return `${base || "course"}-scorm12.zip`;
-}
-
-export function scorm2004ZipFilename(courseTitle: string): string {
-  const base = courseTitle
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gi, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 48);
-  return `${base || "course"}-scorm2004.zip`;
-}
-
-export function standaloneZipFilename(courseTitle: string): string {
-  const base = courseTitle
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gi, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 48);
-  return `${base || "course"}-standalone-html.zip`;
+  return `${base || "course"}-${FILENAME_SUFFIX[format]}.zip`;
 }
