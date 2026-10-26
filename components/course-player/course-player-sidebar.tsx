@@ -4,33 +4,7 @@ import { useMemo } from "react";
 
 import type { NavigationFlow } from "@/lib/course-player/navigation-flow";
 import type { LessonNav } from "@/lib/course-player/types";
-import type { ThemeFonts } from "@/lib/course-theme/theme";
-
-/** Foreground hex for text/icons on top of `accentHex` (sRGB relative luminance). */
-function textOnAccent(accentHex: string): string {
-  const raw = accentHex.trim();
-  const t = raw.startsWith("#") ? raw : `#${raw}`;
-  let r: number;
-  let g: number;
-  let b: number;
-  if (t.length === 4) {
-    r = parseInt(t[1] + t[1], 16);
-    g = parseInt(t[2] + t[2], 16);
-    b = parseInt(t[3] + t[3], 16);
-  } else if (t.length === 7 || t.length === 9) {
-    r = parseInt(t.slice(1, 3), 16);
-    g = parseInt(t.slice(3, 5), 16);
-    b = parseInt(t.slice(5, 7), 16);
-  } else {
-    return "#ffffff";
-  }
-  const lin = (c: number) => {
-    const x = c / 255;
-    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
-  };
-  const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-  return L > 0.55 ? "#18181b" : "#ffffff";
-}
+import { readableTextOn, type ThemeFonts } from "@/lib/course-theme/theme";
 
 type Props = {
   courseTitle: string;
@@ -102,7 +76,7 @@ export function CoursePlayerSidebar({
         : "Open any page from the outline";
   const isWebsite = navigationFlow === "website";
 
-  const activeFg = useMemo(() => textOnAccent(accentColor), [accentColor]);
+  const activeFg = useMemo(() => readableTextOn(accentColor), [accentColor]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">

@@ -120,6 +120,32 @@ export function parseThemeColors(json: Json | undefined): ThemeColors {
   return { button: btn, highlight: hi };
 }
 
+/** Foreground hex for text/icons on top of `backgroundHex` (sRGB relative luminance). */
+export function readableTextOn(backgroundHex: string): string {
+  const raw = backgroundHex.trim();
+  const t = raw.startsWith("#") ? raw : `#${raw}`;
+  let r: number;
+  let g: number;
+  let b: number;
+  if (t.length === 4) {
+    r = parseInt(t[1] + t[1], 16);
+    g = parseInt(t[2] + t[2], 16);
+    b = parseInt(t[3] + t[3], 16);
+  } else if (t.length === 7 || t.length === 9) {
+    r = parseInt(t.slice(1, 3), 16);
+    g = parseInt(t.slice(3, 5), 16);
+    b = parseInt(t.slice(5, 7), 16);
+  } else {
+    return "#ffffff";
+  }
+  const lin = (c: number) => {
+    const x = c / 255;
+    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+  };
+  const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return L > 0.55 ? "#18181b" : "#ffffff";
+}
+
 export function themeFontsToJson(f: ThemeFonts): Json {
   return {
     courseTitle: f.courseTitle,
